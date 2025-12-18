@@ -1,4 +1,5 @@
 from . import resnet
 from . import mobilenetv2
+from . import mobilenetv3
 from . import hrnetv2
 from . import xception
