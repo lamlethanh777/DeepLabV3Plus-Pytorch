@@ -171,7 +171,7 @@ def validate(opts, model, loader, device, metrics, ret_samples_ids=None):
 
     with torch.no_grad():
         for i, (images, labels) in tqdm(enumerate(loader)):
-
+            print(f"Handling images batch #{i}...")
             images = images.to(device, dtype=torch.float32)
             labels = labels.to(device, dtype=torch.long)
 
@@ -181,8 +181,10 @@ def validate(opts, model, loader, device, metrics, ret_samples_ids=None):
 
             metrics.update(targets, preds)
             if ret_samples_ids is not None and i in ret_samples_ids:  # get vis samples
-                ret_samples.append(
-                    (images[0].detach().cpu().numpy(), targets[0], preds[0]))
+                # Limit ret_samples size to prevent memory accumulation
+                if len(ret_samples) < opts.vis_num_samples:
+                    ret_samples.append(
+                        (images[0].detach().cpu().numpy(), targets[0], preds[0]))
 
             if opts.save_val_results:
                 for i in range(len(images)):
@@ -208,6 +210,10 @@ def validate(opts, model, loader, device, metrics, ret_samples_ids=None):
                     plt.savefig('results/%d_overlay.png' % img_id, bbox_inches='tight', pad_inches=0)
                     plt.close()
                     img_id += 1
+            
+            # Clear GPU cache periodically to prevent OOM
+            if i % 50 == 0:
+                torch.cuda.empty_cache()
 
         score = metrics.get_results()
     return score, ret_samples
@@ -244,7 +250,7 @@ def main():
         train_dst, batch_size=opts.batch_size, shuffle=True, num_workers=2,
         drop_last=True)  # drop_last=True to ignore single-image batches.
     val_loader = data.DataLoader(
-        val_dst, batch_size=opts.val_batch_size, shuffle=True, num_workers=2)
+        val_dst, batch_size=opts.val_batch_size, shuffle=False, num_workers=0) # TODO: Originally: True and 2
     print("Dataset: %s, Train set: %d, Val set: %d" %
           (opts.dataset, len(train_dst), len(val_dst)))
 
@@ -295,7 +301,7 @@ def main():
     cur_epochs = 0
     if opts.ckpt is not None and os.path.isfile(opts.ckpt):
         # https://github.com/VainF/DeepLabV3Plus-Pytorch/issues/8#issuecomment-605601402, @PytaichukBohdan
-        checkpoint = torch.load(opts.ckpt, map_location=torch.device('cpu'))
+        checkpoint = torch.load(opts.ckpt, map_location=torch.device('cpu'), weights_only=False)
         model.load_state_dict(checkpoint["model_state"])
         model = nn.DataParallel(model)
         model.to(device)
@@ -318,6 +324,7 @@ def main():
     denorm = utils.Denormalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # denormalization for ori images
 
     if opts.test_only:
+        print("[!] Testing...")
         model.eval()
         val_score, ret_samples = validate(
             opts=opts, model=model, loader=val_loader, device=device, metrics=metrics, ret_samples_ids=vis_sample_id)

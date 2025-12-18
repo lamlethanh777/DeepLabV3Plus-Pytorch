@@ -10,3 +10,5 @@ checkpoints_bak
 cityscapes
 test_results
 justfile
+datasets/data
+slurm_logs
