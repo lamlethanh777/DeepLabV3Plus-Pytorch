@@ -1,0 +1,51 @@
+# DeepLabV3+ MobileNetV3 on Cityscapes
+# Experiment configuration
+
+# Dataset settings
+dataset: cityscapes
+data_root: ./datasets/data/cityscapes
+num_classes: 19
+
+# Model settings
+model: deeplabv3plus_mobilenet_v3_large
+output_stride: 16
+separable_conv: false
+
+# Training settings
+total_itrs: 30000
+batch_size: 16
+val_batch_size: 4
+crop_size: 768
+crop_val: true
+
+# Optimizer settings
+lr: 0.1
+lr_policy: poly
+step_size: 10000
+weight_decay: 0.0001
+momentum: 0.9
+
+# Loss settings
+loss_type: cross_entropy
+
+# Checkpointing
+ckpt: null
+save_ckpt_path: ./experiment/e1/checkpoints
+continue_training: false
+
+# Validation
+val_interval: 1000
+save_val_results: false
+
+# Logging
+print_interval: 10
+enable_vis: false
+vis_port: 13570
+vis_env: main
+vis_num_samples: 8
+
+# System
+gpu_id: '0'
+random_seed: 1
+download: false
+test_only: false

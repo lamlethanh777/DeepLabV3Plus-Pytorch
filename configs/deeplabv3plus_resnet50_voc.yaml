@@ -1,0 +1,51 @@
+# DeepLabV3+ ResNet50 on PASCAL VOC
+# Experiment configuration
+
+# Dataset settings
+dataset: voc
+data_root: ./datasets/data/voc
+num_classes: 21
+year: 2012_aug
+
+# Model settings
+model: deeplabv3plus_resnet50
+output_stride: 16
+separable_conv: false
+
+# Training settings
+total_itrs: 30000
+batch_size: 16
+val_batch_size: 1
+crop_size: 513
+crop_val: false
+
+# Optimizer settings
+lr: 0.01
+lr_policy: poly
+step_size: 10000
+weight_decay: 0.0001
+momentum: 0.9
+
+# Loss settings
+loss_type: cross_entropy
+
+# Checkpointing
+ckpt: ./checkpoints/best_deeplabv3plus_resnet50_voc_os16.pth
+continue_training: false
+
+# Validation
+val_interval: 100
+save_val_results: false
+
+# Logging
+print_interval: 10
+enable_vis: false
+vis_port: 13570
+vis_env: main
+vis_num_samples: 8
+
+# System
+gpu_id: '0'
+random_seed: 1
+download: false
+test_only: false

@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=v3-101-cityscapes
+#SBATCH --job-name=e1-city
 #SBATCH --nodes=1                # node count
 #SBATCH --ntasks=1               # total number of tasks across all nodes
 #SBATCH --cpus-per-task=1        # cpu-cores per task (>1 if multi-threaded tasks)
 #SBATCH --mem-per-cpu=12G         # memory per cpu-core (4G is default)
 #SBATCH --gres=gpu:1             # number of gpus per node
-#SBATCH --time=01:00:00          # total run time limit (HH:MM:SS)
-#SBATCH --output=/media02/tphung/workspace-Lam/cv_project/DeepLabV3Plus-Pytorch/exp/slurm_logs/%j_%x.out  # output
-#SBATCH --error=/media02/tphung/workspace-Lam/cv_project/DeepLabV3Plus-Pytorch//exp/slurm_logs/%j_%x.err   # error
+#SBATCH --time=10:00:00          # total run time limit (HH:MM:SS)
+#SBATCH --output=/media02/tphung/workspace-Lam/cv_project/DeepLabV3Plus-Pytorch/experiment/e1/slurm_logs/%j_%x.out  # output
+#SBATCH --error=/media02/tphung/workspace-Lam/cv_project/DeepLabV3Plus-Pytorch/experiment/e1/slurm_logs/%j_%x.err   # error
 
 # START
 echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
@@ -19,27 +19,30 @@ echo "START TIME: " $(date)
 START_TIME=$(date +%s)
 echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 
-# load miniconda
+################################# MAIN PART #################################
+# ENV
 source /media02/tphung/third-parties/miniconda3/bin/activate vlm-old
 
-# run code
-cd /media02/tphung/workspace-Lam/cv_project/DeepLabV3Plus-Pytorch
+# VARIABLE
+PROJECT_ROOT="/media02/tphung/workspace-Lam/cv_project/DeepLabV3Plus-Pytorch"
+EXP_NAME="e1"
+CONFIG_FILE="$experiment/{EXP_NAME}/deeplabv3plus_mobilenet_v3_large_cityscapes.yaml"
+MODEL_CHECKPOINT=""
+
+cd $PROJECT_ROOT
 pwd
 
+# Any additional command-line arguments will override the config file
 python main.py \
-    --model deeplabv3plus_mobilenet \
-    --gpu_id 0 \
-    --dataset cityscapes \
-    --data_root datasets/data/cityscapes \
-    --crop_val \
-    --lr 0.01 \
-    --crop_size 513 \
-    --batch_size 16 \
-    --output_stride 16 \
-    --ckpt checkpoints/best_deeplabv3plus_resnet101_cityscapes_os16.pth \
-    --test_only \
-    --save_val_results \
-    --ckpt checkpoints/
+    --config $CONFIG_FILE \
+    --exp_name $EXP_NAME \
+
+    # --continue-training \
+    # ckpt $MODEL_CHECKPOINT \
+
+    # --test_only \
+    # --save_val_results \
+################################# MAIN PART #################################
 
 # END
 echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"

@@ -5,6 +5,7 @@ import os
 import random
 import argparse
 import numpy as np
+import yaml
 
 from torch.utils import data
 from datasets import VOCSegmentation, Cityscapes
@@ -22,6 +23,10 @@ import matplotlib.pyplot as plt
 
 def get_argparser():
     parser = argparse.ArgumentParser()
+
+    # Config file
+    parser.add_argument("--config", type=str, default=None,
+                        help="path to YAML config file (overrides other arguments)")
 
     # Datset Options
     parser.add_argument("--data_root", type=str, default='./datasets/data',
@@ -66,9 +71,13 @@ def get_argparser():
                         help='batch size for validation (default: 4)')
     parser.add_argument("--crop_size", type=int, default=513)
 
+    parser.add_argument("--exp_name", type=str, default='default',
+                        help="experiment name (default: default)")
     parser.add_argument("--ckpt", default=None, type=str,
                         help="restore from checkpoint")
     parser.add_argument("--continue_training", action='store_true', default=False)
+    parser.add_argument("--save_ckpt_path", type=str, default=None,
+                        help="path to save checkpoints (default: ./experiment/{exp_name}/checkpoints)")
 
     parser.add_argument("--loss_type", type=str, default='cross_entropy',
                         choices=['cross_entropy', 'focal_loss'], help="loss type (default: False)")
@@ -99,6 +108,40 @@ def get_argparser():
     parser.add_argument("--vis_num_samples", type=int, default=8,
                         help='number of samples for visualization (default: 8)')
     return parser
+
+
+def load_config(config_path):
+    """Load configuration from YAML file"""
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    return config
+
+
+def merge_config_with_args(opts):
+    """Merge YAML config with command line arguments. 
+    Config file values take precedence over defaults, but command line args override config."""
+    if opts.config is None:
+        return opts
+    
+    # Load config file
+    config = load_config(opts.config)
+    
+    # Get command line args that were explicitly set (not defaults)
+    parser = get_argparser()
+    default_args = vars(parser.parse_args([]))
+    current_args = vars(opts)
+    
+    # Update opts with config values, but keep explicitly set command line args
+    for key, value in config.items():
+        if hasattr(opts, key):
+            # Only use config value if command line arg is still at default
+            if current_args[key] == default_args.get(key):
+                setattr(opts, key, value)
+        else:
+            # Add new attributes from config
+            setattr(opts, key, value)
+    
+    return opts
 
 
 def get_dataset(opts):
@@ -221,11 +264,27 @@ def validate(opts, model, loader, device, metrics, ret_samples_ids=None):
 
 def main():
     opts = get_argparser().parse_args()
+    
+    # Merge YAML config if provided
+    opts = merge_config_with_args(opts)
+    
+    # Set default checkpoint path based on experiment name if not specified
+    if opts.save_ckpt_path is None:
+        opts.save_ckpt_path = f'./experiment/{opts.exp_name}/checkpoints'
+    
     if opts.dataset.lower() == 'voc':
-        opts.num_classes = 21
+        opts.num_classes = 21 if opts.num_classes is None else opts.num_classes
     elif opts.dataset.lower() == 'cityscapes':
-        opts.num_classes = 19
+        opts.num_classes = 19 if opts.num_classes is None else opts.num_classes
 
+    # Print all configuration
+    print("="*50)
+    print("Configuration:")
+    print("="*50)
+    for key, value in sorted(vars(opts).items()):
+        print(f"  {key}: {value}")
+    print("="*50)
+    
     # Setup visualization
     vis = Visualizer(port=opts.vis_port,
                      env=opts.vis_env) if opts.enable_vis else None
@@ -294,7 +353,7 @@ def main():
         }, path)
         print(f"Model saved as {path}")
 
-    utils.mkdir('checkpoints')
+    utils.mkdir(opts.save_ckpt_path)
     # Restore
     best_score = 0.0
     cur_itrs = 0
@@ -332,6 +391,8 @@ def main():
         return
 
     interval_loss = 0
+    # progress bar for total iterations
+    pbar = tqdm(total=int(opts.total_itrs), initial=cur_itrs, unit='it', desc='Training')
     while True:  # cur_itrs < opts.total_itrs:
         # =====  Train  =====
         model.train()
@@ -350,6 +411,11 @@ def main():
 
             np_loss = loss.detach().cpu().numpy()
             interval_loss += np_loss
+            # advance global training progress bar one iteration
+            try:
+                pbar.update(1)
+            except Exception:
+                pass
             if vis is not None:
                 vis.vis_scalar('Loss', cur_itrs, np_loss)
 
@@ -360,8 +426,8 @@ def main():
                 interval_loss = 0.0
 
             if (cur_itrs) % opts.val_interval == 0:
-                save_ckpt('checkpoints/latest_%s_%s_os%d.pth' %
-                          (opts.model, opts.dataset, opts.output_stride))
+                save_ckpt('%s/latest_%s_%s_os%d.pth' %
+                          (opts.save_ckpt_path, opts.model, opts.dataset, opts.output_stride))
                 print("validation...")
                 model.eval()
                 val_score, ret_samples = validate(
@@ -370,8 +436,8 @@ def main():
                 print(metrics.to_str(val_score))
                 if val_score['Mean IoU'] > best_score:  # save best model
                     best_score = val_score['Mean IoU']
-                    save_ckpt('checkpoints/best_%s_%s_os%d.pth' %
-                              (opts.model, opts.dataset, opts.output_stride))
+                    save_ckpt('%s/best_%s_%s_os%d.pth' %
+                              (opts.save_ckpt_path, opts.model, opts.dataset, opts.output_stride))
 
                 if vis is not None:  # visualize validation score and samples
                     vis.vis_scalar("[Val] Overall Acc", cur_itrs, val_score['Overall Acc'])
@@ -388,6 +454,10 @@ def main():
             scheduler.step()
 
             if cur_itrs >= opts.total_itrs:
+                try:
+                    pbar.close()
+                except Exception:
+                    pass
                 return
 
 
