@@ -96,7 +96,7 @@ class ConvBNActivation(nn.Sequential):
             norm_layer(out_planes),
         ]
         if activation_layer is not None:
-            layers.append(activation_layer(inplace=True))
+            layers.append(activation_layer(inplace=False))
         super().__init__(*layers)
         self.kernel_size = kernel_size
         self.dilation = dilation
@@ -213,7 +213,7 @@ class InvertedResidual(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         result = self.block(x)
         if self.use_res_connect:
-            result += x
+            result = result + x  # Use non-inplace addition
         return result
 
 
@@ -287,8 +287,8 @@ class MobileNetV3(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.classifier = nn.Sequential(
             nn.Linear(lastconv_output_channels, last_channel),
-            nn.Hardswish(inplace=True),
-            nn.Dropout(p=dropout, inplace=True),
+            nn.Hardswish(inplace=False),
+            nn.Dropout(p=dropout, inplace=False),
             nn.Linear(last_channel, num_classes),
         )
 

@@ -31,6 +31,7 @@ class DeepLabHeadV3Plus(nn.Module):
         self.project = nn.Sequential( 
             nn.Conv2d(low_level_channels, 48, 1, bias=False),
             nn.BatchNorm2d(48),
+            # nn.ReLU(inplace=False),
             nn.ReLU(inplace=True),
         )
 
@@ -39,6 +40,7 @@ class DeepLabHeadV3Plus(nn.Module):
         self.classifier = nn.Sequential(
             nn.Conv2d(304, 256, 3, padding=1, bias=False),
             nn.BatchNorm2d(256),
+            # nn.ReLU(inplace=False),
             nn.ReLU(inplace=True),
             nn.Conv2d(256, num_classes, 1)
         )
@@ -66,7 +68,7 @@ class DeepLabHead(nn.Module):
             ASPP(in_channels, aspp_dilate),
             nn.Conv2d(256, 256, 3, padding=1, bias=False),
             nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=False),
             nn.Conv2d(256, num_classes, 1)
         )
         self._init_weight()
@@ -113,7 +115,7 @@ class ASPPConv(nn.Sequential):
         modules = [
             nn.Conv2d(in_channels, out_channels, 3, padding=dilation, dilation=dilation, bias=False),
             nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True)
+            nn.ReLU(inplace=False)
         ]
         super(ASPPConv, self).__init__(*modules)
 
@@ -123,7 +125,7 @@ class ASPPPooling(nn.Sequential):
             nn.AdaptiveAvgPool2d(1),
             nn.Conv2d(in_channels, out_channels, 1, bias=False),
             nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True))
+            nn.ReLU(inplace=False))
 
     def forward(self, x):
         size = x.shape[-2:]
@@ -138,7 +140,7 @@ class ASPP(nn.Module):
             nn.Sequential(
                 nn.Conv2d(in_channels, out_channels, 1, bias=False),
                 nn.BatchNorm2d(out_channels),
-                nn.ReLU(inplace=True),
+                nn.ReLU(inplace=False),
             )
         ]
 
@@ -153,7 +155,7 @@ class ASPP(nn.Module):
         self.project = nn.Sequential(
             nn.Conv2d(5 * out_channels, out_channels, 1, bias=False),
             nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=False),
             nn.Dropout(0.1),)
 
     def forward(self, x):
