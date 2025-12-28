@@ -3,6 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from .utils import _SimpleSegmentationModel
+from .attention import ShuffleAttention, ECAAttention
 
 
 __all__ = ["DeepLabV3"]
@@ -163,6 +164,128 @@ class ASPP(nn.Module):
         res = torch.cat(res, dim=1)
         return self.project(res)
 
+
+class ASPPWithShuffleAttention(nn.Module):
+    """
+    ASPP module with Shuffle Attention applied after feature concatenation.
+    
+    Shuffle Attention is inserted after the 5-branch concatenation (1280 channels)
+    and before the 1×1 projection convolution.
+    
+    Args:
+        in_channels (int): Number of input channels from backbone.
+        atrous_rates (list): Dilation rates for ASPP convolutions.
+        attention_groups (int): Number of groups for ShuffleAttention. Default: 64.
+    """
+    
+    def __init__(self, in_channels, atrous_rates, attention_groups=64):
+        super(ASPPWithShuffleAttention, self).__init__()
+        out_channels = 256
+        modules = [
+            nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, 1, bias=False),
+                nn.BatchNorm2d(out_channels),
+                nn.ReLU(inplace=False),
+            )
+        ]
+
+        rate1, rate2, rate3 = tuple(atrous_rates)
+        modules.append(ASPPConv(in_channels, out_channels, rate1))
+        modules.append(ASPPConv(in_channels, out_channels, rate2))
+        modules.append(ASPPConv(in_channels, out_channels, rate3))
+        modules.append(ASPPPooling(in_channels, out_channels))
+
+        self.convs = nn.ModuleList(modules)
+        
+        # Shuffle Attention on concatenated features (5 * 256 = 1280 channels)
+        self.attention = ShuffleAttention(5 * out_channels, groups=attention_groups)
+
+        self.project = nn.Sequential(
+            nn.Conv2d(5 * out_channels, out_channels, 1, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=False),
+            nn.Dropout(0.1),
+        )
+
+    def forward(self, x):
+        res = [conv(x) for conv in self.convs]
+        res = torch.cat(res, dim=1)  # (B, 1280, H, W)
+        res = self.attention(res)     # Apply Shuffle Attention
+        return self.project(res)
+
+
+class DeepLabHeadV3PlusWithECA(nn.Module):
+    """
+    DeepLabV3+ head with ECA Attention after encoder-decoder feature fusion.
+    
+    ECA Attention is applied on the 304-channel tensor immediately after 
+    concatenating low-level features with upsampled ASPP output.
+    
+    Args:
+        in_channels (int): Number of input channels from backbone high-level features.
+        low_level_channels (int): Number of channels in low-level features.
+        num_classes (int): Number of output segmentation classes.
+        aspp_dilate (list): Dilation rates for ASPP. Default: [12, 24, 36].
+        use_shuffle_attention (bool): Use ShuffleAttention in ASPP. Default: True.
+        shuffle_attention_groups (int): Groups for ShuffleAttention. Default: 64.
+    """
+    
+    def __init__(
+        self, 
+        in_channels, 
+        low_level_channels, 
+        num_classes, 
+        aspp_dilate=[12, 24, 36],
+        use_shuffle_attention=True,
+        shuffle_attention_groups=64
+    ):
+        super(DeepLabHeadV3PlusWithECA, self).__init__()
+        self.project = nn.Sequential(
+            nn.Conv2d(low_level_channels, 48, 1, bias=False),
+            nn.BatchNorm2d(48),
+            nn.ReLU(inplace=True),
+        )
+
+        # Use ASPP with ShuffleAttention or standard ASPP
+        if use_shuffle_attention:
+            self.aspp = ASPPWithShuffleAttention(
+                in_channels, aspp_dilate, attention_groups=shuffle_attention_groups
+            )
+        else:
+            self.aspp = ASPP(in_channels, aspp_dilate)
+
+        # ECA Attention on fused features (48 + 256 = 304 channels)
+        self.eca = ECAAttention(304)
+
+        self.classifier = nn.Sequential(
+            nn.Conv2d(304, 256, 3, padding=1, bias=False),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, num_classes, 1)
+        )
+        self._init_weight()
+
+    def forward(self, feature):
+        low_level_feature = self.project(feature['low_level'])
+        output_feature = self.aspp(feature['out'])
+        output_feature = F.interpolate(
+            output_feature, 
+            size=low_level_feature.shape[2:], 
+            mode='bilinear', 
+            align_corners=False
+        )
+        # Concatenate and apply ECA attention
+        fused = torch.cat([low_level_feature, output_feature], dim=1)  # (B, 304, H, W)
+        fused = self.eca(fused)  # Apply ECA Attention
+        return self.classifier(fused)
+
+    def _init_weight(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight)
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
 
 
 def convert_to_separable_conv(module):

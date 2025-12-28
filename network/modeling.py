@@ -1,5 +1,5 @@
 from .utils import IntermediateLayerGetter
-from ._deeplab import DeepLabHead, DeepLabHeadV3Plus, DeepLabV3
+from ._deeplab import DeepLabHead, DeepLabHeadV3Plus, DeepLabHeadV3PlusWithECA, DeepLabV3
 from .backbone import resnet, mobilenetv2, mobilenetv3, hrnetv2, xception
 
 
@@ -165,6 +165,76 @@ def _segm_mobilenet_v3(
         classifier = DeepLabHead(inplanes, num_classes, aspp_dilate)
     backbone = IntermediateLayerGetter(backbone, return_layers=return_layers)
 
+    return DeepLabV3(backbone, classifier)
+
+
+def _segm_mobilenet_attention(
+    name, backbone_name, num_classes, output_stride, pretrained_backbone,
+    use_shuffle_attention=True, shuffle_attention_groups=64
+):
+    """MobileNetV2 backbone with attention-augmented DeepLabV3+ head."""
+    aspp_dilate = [12, 24, 36] if output_stride == 8 else [6, 12, 18]
+    backbone = mobilenetv2.mobilenet_v2(
+        pretrained=pretrained_backbone, output_stride=output_stride
+    )
+
+    # rename layers
+    backbone.low_level_features = backbone.features[:4]
+    backbone.high_level_features = backbone.features[4:-1]
+    backbone.features = None
+    backbone.classifier = None
+
+    inplanes = 320
+    if name == "deeplabv3plus_attention":
+        return_layers = {
+            "high_level_features": "out",
+            "low_level_features": "low_level",
+        }
+        low_level_planes = 24
+
+        classifier = DeepLabHeadV3PlusWithECA(
+            inplanes, low_level_planes, num_classes, aspp_dilate,
+            use_shuffle_attention=use_shuffle_attention,
+            shuffle_attention_groups=shuffle_attention_groups
+        )
+    else:
+        raise ValueError(f"Unknown architecture: {name}")
+    
+    backbone = IntermediateLayerGetter(backbone, return_layers=return_layers)
+    return DeepLabV3(backbone, classifier)
+
+
+def _segm_resnet_attention(
+    name, backbone_name, num_classes, output_stride, pretrained_backbone,
+    use_shuffle_attention=True, shuffle_attention_groups=64
+):
+    """ResNet backbone with attention-augmented DeepLabV3+ head."""
+    if output_stride == 8:
+        replace_stride_with_dilation = [False, True, True]
+        aspp_dilate = [12, 24, 36]
+    else:
+        replace_stride_with_dilation = [False, False, True]
+        aspp_dilate = [6, 12, 18]
+
+    backbone = resnet.__dict__[backbone_name](
+        pretrained=pretrained_backbone,
+        replace_stride_with_dilation=replace_stride_with_dilation,
+    )
+
+    inplanes = 2048
+    if name == "deeplabv3plus_attention":
+        return_layers = {"layer4": "out", "layer1": "low_level"}
+        low_level_planes = 256
+
+        classifier = DeepLabHeadV3PlusWithECA(
+            inplanes, low_level_planes, num_classes, aspp_dilate,
+            use_shuffle_attention=use_shuffle_attention,
+            shuffle_attention_groups=shuffle_attention_groups
+        )
+    else:
+        raise ValueError(f"Unknown architecture: {name}")
+    
+    backbone = IntermediateLayerGetter(backbone, return_layers=return_layers)
     return DeepLabV3(backbone, classifier)
 
 
@@ -431,4 +501,86 @@ def deeplabv3plus_xception(num_classes=21, output_stride=8, pretrained_backbone=
         num_classes,
         output_stride=output_stride,
         pretrained_backbone=pretrained_backbone,
+    )
+
+
+# DeepLabV3+ with Attention
+def deeplabv3plus_mobilenet_attention(
+    num_classes=21, output_stride=8, pretrained_backbone=True,
+    use_shuffle_attention=True, shuffle_attention_groups=64
+):
+    """Constructs a DeepLabV3+ model with MobileNetV2 backbone and attention modules.
+
+    Features Shuffle Attention in ASPP (after 5-branch concatenation) and 
+    ECA Attention after encoder-decoder feature fusion.
+
+    Args:
+        num_classes (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+        use_shuffle_attention (bool): Use ShuffleAttention in ASPP. Default: True.
+        shuffle_attention_groups (int): Number of groups for ShuffleAttention. Default: 64.
+    """
+    return _segm_mobilenet_attention(
+        "deeplabv3plus_attention",
+        "mobilenetv2",
+        num_classes,
+        output_stride=output_stride,
+        pretrained_backbone=pretrained_backbone,
+        use_shuffle_attention=use_shuffle_attention,
+        shuffle_attention_groups=shuffle_attention_groups,
+    )
+
+
+def deeplabv3plus_resnet50_attention(
+    num_classes=21, output_stride=8, pretrained_backbone=True,
+    use_shuffle_attention=True, shuffle_attention_groups=64
+):
+    """Constructs a DeepLabV3+ model with ResNet-50 backbone and attention modules.
+
+    Features Shuffle Attention in ASPP (after 5-branch concatenation) and 
+    ECA Attention after encoder-decoder feature fusion.
+
+    Args:
+        num_classes (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+        use_shuffle_attention (bool): Use ShuffleAttention in ASPP. Default: True.
+        shuffle_attention_groups (int): Number of groups for ShuffleAttention. Default: 64.
+    """
+    return _segm_resnet_attention(
+        "deeplabv3plus_attention",
+        "resnet50",
+        num_classes,
+        output_stride=output_stride,
+        pretrained_backbone=pretrained_backbone,
+        use_shuffle_attention=use_shuffle_attention,
+        shuffle_attention_groups=shuffle_attention_groups,
+    )
+
+
+def deeplabv3plus_resnet101_attention(
+    num_classes=21, output_stride=8, pretrained_backbone=True,
+    use_shuffle_attention=True, shuffle_attention_groups=64
+):
+    """Constructs a DeepLabV3+ model with ResNet-101 backbone and attention modules.
+
+    Features Shuffle Attention in ASPP (after 5-branch concatenation) and 
+    ECA Attention after encoder-decoder feature fusion.
+
+    Args:
+        num_classes (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+        use_shuffle_attention (bool): Use ShuffleAttention in ASPP. Default: True.
+        shuffle_attention_groups (int): Number of groups for ShuffleAttention. Default: 64.
+    """
+    return _segm_resnet_attention(
+        "deeplabv3plus_attention",
+        "resnet101",
+        num_classes,
+        output_stride=output_stride,
+        pretrained_backbone=pretrained_backbone,
+        use_shuffle_attention=use_shuffle_attention,
+        shuffle_attention_groups=shuffle_attention_groups,
     )

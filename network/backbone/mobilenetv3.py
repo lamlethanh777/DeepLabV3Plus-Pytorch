@@ -5,10 +5,7 @@ import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
-try:  # for torchvision<0.4
-    from torchvision.models.utils import load_state_dict_from_url
-except:  # for torchvision>=0.4
-    from torch.hub import load_state_dict_from_url
+from torch.hub import load_state_dict_from_url
 
 
 __all__ = ["MobileNetV3", "mobilenet_v3_large"]
