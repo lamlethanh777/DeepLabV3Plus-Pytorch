@@ -3,7 +3,7 @@
 
 # Dataset settings
 dataset: voc
-data_root: ./datasets/data/voc
+data_root: ./datasets/data
 num_classes: 21
 year: 2012_aug
 
@@ -15,7 +15,7 @@ separable_conv: false
 # Training settings
 total_itrs: 30000
 batch_size: 16
-val_batch_size: 1
+val_batch_size: 1 # default of voc
 crop_size: 513
 crop_val: false
 
@@ -30,7 +30,7 @@ momentum: 0.9
 loss_type: cross_entropy
 
 # Checkpointing
-ckpt: null
+ckpt: ./experiment/e1/checkpoints/best_deeplabv3plus_mobilenet_v3_large_voc_os16.pth
 save_ckpt_path: ./experiment/e1/checkpoints
 continue_training: false
 

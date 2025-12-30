@@ -204,6 +204,54 @@ def _segm_mobilenet_attention(
     return DeepLabV3(backbone, classifier)
 
 
+def _segm_mobilenet_v3_attention(
+    name, backbone_name, num_classes, output_stride, pretrained_backbone,
+    use_shuffle_attention=True, shuffle_attention_groups=64
+):
+    """MobileNetV3-Large backbone with attention-augmented DeepLabV3+ head."""
+    aspp_dilate = [12, 24, 36] if output_stride == 8 else [6, 12, 18]
+    backbone = mobilenetv3.mobilenet_v3_large(
+        pretrained=pretrained_backbone, output_stride=output_stride
+    )
+
+    # MobileNetV3-Large feature structure:
+    # features[0]: first conv layer (16 channels, stride 2)
+    # features[1]: 16 channels
+    # features[2-3]: 24 channels (C1, stride 4)
+    # features[4-6]: 40 channels (C2, stride 8)
+    # features[7-10]: 80 channels
+    # features[11-12]: 112 channels (C3)
+    # features[13-15]: 160 channels (C4)
+    # features[16]: last conv (960 channels)
+
+    # For low_level_features: use layers 0-3 (outputs 24 channels at stride 4)
+    # For high_level_features: layers 4-15 (outputs 160 channels)
+    backbone.low_level_features = backbone.features[:4]  # Outputs 24 channels
+    backbone.high_level_features = backbone.features[4:-1]  # Outputs 160 channels
+    backbone.features = None
+    backbone.classifier = None
+    backbone.avgpool = None
+
+    inplanes = 160
+    if name == "deeplabv3plus_attention":
+        return_layers = {
+            "high_level_features": "out",
+            "low_level_features": "low_level",
+        }
+        low_level_planes = 24  # MobileNetV3-Large has 24 channels at layer 3
+
+        classifier = DeepLabHeadV3PlusWithECA(
+            inplanes, low_level_planes, num_classes, aspp_dilate,
+            use_shuffle_attention=use_shuffle_attention,
+            shuffle_attention_groups=shuffle_attention_groups
+        )
+    else:
+        raise ValueError(f"Unknown architecture: {name}")
+    
+    backbone = IntermediateLayerGetter(backbone, return_layers=return_layers)
+    return DeepLabV3(backbone, classifier)
+
+
 def _segm_resnet_attention(
     name, backbone_name, num_classes, output_stride, pretrained_backbone,
     use_shuffle_attention=True, shuffle_attention_groups=64
@@ -578,6 +626,33 @@ def deeplabv3plus_resnet101_attention(
     return _segm_resnet_attention(
         "deeplabv3plus_attention",
         "resnet101",
+        num_classes,
+        output_stride=output_stride,
+        pretrained_backbone=pretrained_backbone,
+        use_shuffle_attention=use_shuffle_attention,
+        shuffle_attention_groups=shuffle_attention_groups,
+    )
+
+
+def deeplabv3plus_mobilenet_v3_large_attention(
+    num_classes=21, output_stride=8, pretrained_backbone=True,
+    use_shuffle_attention=True, shuffle_attention_groups=64
+):
+    """Constructs a DeepLabV3+ model with MobileNetV3-Large backbone and attention modules.
+
+    Features Shuffle Attention in ASPP (after 5-branch concatenation) and 
+    ECA Attention after encoder-decoder feature fusion.
+
+    Args:
+        num_classes (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+        use_shuffle_attention (bool): Use ShuffleAttention in ASPP. Default: True.
+        shuffle_attention_groups (int): Number of groups for ShuffleAttention. Default: 64.
+    """
+    return _segm_mobilenet_v3_attention(
+        "deeplabv3plus_attention",
+        "mobilenetv3_large",
         num_classes,
         output_stride=output_stride,
         pretrained_backbone=pretrained_backbone,

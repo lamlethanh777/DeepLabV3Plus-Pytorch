@@ -110,6 +110,7 @@ class VOCSegmentation(data.Dataset):
             download_extract(self.url, self.root, self.filename, self.md5)
 
         if not os.path.isdir(voc_root):
+            print(voc_root)
             raise RuntimeError('Dataset not found or corrupted.' +
                                ' You can use download=True to download it')
 

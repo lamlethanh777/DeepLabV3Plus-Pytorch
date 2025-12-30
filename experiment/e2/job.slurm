@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=e1-voc
+#SBATCH --job-name=e2-voc
 #SBATCH --nodelist=gpu04
 #SBATCH --nodes=1                # node count
 #SBATCH --ntasks=1               # total number of tasks across all nodes
@@ -7,8 +7,8 @@
 #SBATCH --mem-per-cpu=12G         # memory per cpu-core (4G is default)
 #SBATCH --gres=gpu:1             # number of gpus per node
 #SBATCH --time=11:00:00          # total run time limit (HH:MM:SS)
-#SBATCH --output=/media02/tphung/workspace-Lam/cv_project/DeepLabV3Plus-Pytorch/experiment/e1/slurm_logs/%j_%x.out  # output
-#SBATCH --error=/media02/tphung/workspace-Lam/cv_project/DeepLabV3Plus-Pytorch/experiment/e1/slurm_logs/%j_%x.err   # error
+#SBATCH --output=/media02/tphung/workspace-Lam/cv_project/DeepLabV3Plus-Pytorch/experiment/e2/slurm_logs/%j_%x.out  # output
+#SBATCH --error=/media02/tphung/workspace-Lam/cv_project/DeepLabV3Plus-Pytorch/experiment/e2/slurm_logs/%j_%x.err   # error
 
 # START
 echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
@@ -26,10 +26,10 @@ source /media02/tphung/third-parties/miniconda3/bin/activate vlm-old
 
 # VARIABLE
 PROJECT_ROOT="/media02/tphung/workspace-Lam/cv_project/DeepLabV3Plus-Pytorch"
-EXP_NAME="e1"
+EXP_NAME="e2"
 DATASET="voc"
-CONFIG_FILE="experiment/${EXP_NAME}/deeplabv3plus_mobilenet_v3_large_${DATASET}.yaml"
-MODEL_CHECKPOINT="${PROJECT_ROOT}/experiment/${EXP_NAME}/checkpoints/best_deeplabv3plus_mobilenet_v3_large_${DATASET}_os16.pth"
+CONFIG_FILE="experiment/${EXP_NAME}/deeplabv3plus_mobilenet_attention_${DATASET}.yaml"
+MODEL_CHECKPOINT="${PROJECT_ROOT}/experiment/${EXP_NAME}/checkpoints/best_deeplabv3plus_mobilenet_attention_${DATASET}_os16.pth"
 
 cd $PROJECT_ROOT
 pwd

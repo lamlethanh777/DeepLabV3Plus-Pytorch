@@ -1,25 +1,26 @@
-# DeepLabV3+ MobileNetV3 on Cityscapes
+# DeepLabV3+ MobileNet on PASCAL VOC
 # Experiment configuration
 
 # Dataset settings
-dataset: cityscapes
-data_root: ./datasets/data/cityscapes
-num_classes: 19
+dataset: voc
+data_root: ./datasets/data
+num_classes: 21
+year: 2012_aug
 
 # Model settings
-model: deeplabv3plus_mobilenet_v3_large
+model: deeplabv3plus_mobilenet
 output_stride: 16
 separable_conv: false
 
 # Training settings
 total_itrs: 30000
 batch_size: 16
-val_batch_size: 4
-crop_size: 768
-crop_val: true
+val_batch_size: 1
+crop_size: 513
+crop_val: false
 
 # Optimizer settings
-lr: 0.1
+lr: 0.01
 lr_policy: poly
 step_size: 10000
 weight_decay: 0.0001
@@ -29,12 +30,11 @@ momentum: 0.9
 loss_type: cross_entropy
 
 # Checkpointing
-ckpt: ./experiment/e1/checkpoints/best_deeplabv3plus_mobilenet_v3_large_cityscapes_os16.pth
-save_ckpt_path: ./experiment/e1/checkpoints
+ckpt: ./experiment/e0/checkpoints/best_deeplabv3plus_mobilenet_voc_os16.pth
 continue_training: false
 
 # Validation
-val_interval: 1000
+val_interval: 100
 save_val_results: false
 
 # Logging

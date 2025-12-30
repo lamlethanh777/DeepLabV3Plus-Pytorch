@@ -1,6 +1,7 @@
-# DeepLabV3+ MobileNet with Attention on Cityscapes
-# Experiment configuration
+# DeepLabV3+ MobileNetV3-Large with Attention on Cityscapes
+# Experiment e3 configuration
 # Features Shuffle Attention in ASPP and ECA Attention after encoder-decoder fusion
+# Combines MobileNetV3-Large backbone with attention-augmented decoder
 
 # Dataset settings
 dataset: cityscapes
@@ -8,14 +9,14 @@ data_root: ./datasets/data/cityscapes
 num_classes: 19
 
 # Model settings
-model: deeplabv3plus_mobilenet_attention
+model: deeplabv3plus_mobilenet_v3_large_attention
 output_stride: 16
 separable_conv: false
 
 # Training settings
 total_itrs: 30000
-batch_size: 4
-val_batch_size: 1
+batch_size: 8
+val_batch_size: 8
 crop_size: 768
 crop_val: true
 
@@ -30,7 +31,8 @@ momentum: 0.9
 loss_type: cross_entropy
 
 # Checkpointing
-ckpt: ./checkpoints/best_deeplabv3plus_mobilenet_attention_cityscapes_os16.pth
+ckpt: null
+save_ckpt_path: ./experiment/e3/checkpoints
 continue_training: false
 
 # Validation

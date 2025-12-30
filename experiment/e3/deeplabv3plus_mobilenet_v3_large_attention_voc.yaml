@@ -1,21 +1,23 @@
-# DeepLabV3+ MobileNet on PASCAL VOC
-# Experiment configuration
+# DeepLabV3+ MobileNetV3-Large with Attention on PASCAL VOC
+# Experiment e3 configuration
+# Features Shuffle Attention in ASPP and ECA Attention after encoder-decoder fusion
+# Combines MobileNetV3-Large backbone with attention-augmented decoder
 
 # Dataset settings
 dataset: voc
-data_root: ./datasets/data/voc
+data_root: ./datasets/data
 num_classes: 21
 year: 2012_aug
 
 # Model settings
-model: deeplabv3plus_mobilenet
+model: deeplabv3plus_mobilenet_v3_large_attention
 output_stride: 16
 separable_conv: false
 
 # Training settings
 total_itrs: 30000
 batch_size: 16
-val_batch_size: 1
+val_batch_size: 1 # default of voc
 crop_size: 513
 crop_val: false
 
@@ -30,7 +32,8 @@ momentum: 0.9
 loss_type: cross_entropy
 
 # Checkpointing
-ckpt: ./checkpoints/best_deeplabv3plus_mobilenet_voc_os16.pth
+ckpt: null
+save_ckpt_path: ./experiment/e3/checkpoints
 continue_training: false
 
 # Validation
