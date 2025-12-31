@@ -179,6 +179,7 @@ def get_dataset(opts):
     if opts.dataset == 'cityscapes':
         train_transform = et.ExtCompose([
             # et.ExtResize( 512 ),
+            et.ExtRandomScale((0.5, 2.0)),  # Add scale augmentation
             et.ExtRandomCrop(size=(opts.crop_size, opts.crop_size)),
             et.ExtColorJitter(brightness=0.5, contrast=0.5, saturation=0.5),
             et.ExtRandomHorizontalFlip(),
@@ -329,7 +330,12 @@ def main():
     # optimizer = torch.optim.SGD(params=model.parameters(), lr=opts.lr, momentum=0.9, weight_decay=opts.weight_decay)
     # torch.optim.lr_scheduler.StepLR(optimizer, step_size=opts.lr_decay_step, gamma=opts.lr_decay_factor)
     if opts.lr_policy == 'poly':
-        scheduler = utils.PolyLR(optimizer, opts.total_itrs, power=0.9)
+        # Check if warmup is requested
+        if hasattr(opts, 'warmup_iters') and opts.warmup_iters > 0:
+            scheduler = utils.WarmupPolyLR(optimizer, opts.total_itrs, 
+                                           warmup_iters=opts.warmup_iters, power=0.9)
+        else:
+            scheduler = utils.PolyLR(optimizer, opts.total_itrs, power=0.9)
     elif opts.lr_policy == 'step':
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=opts.step_size, gamma=0.1)
 
@@ -406,6 +412,8 @@ def main():
             outputs = model(images)
             loss = criterion(outputs, labels)
             loss.backward()
+            # Add gradient clipping to prevent exploding gradients
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
 
             np_loss = loss.detach().cpu().numpy()

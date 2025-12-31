@@ -139,17 +139,17 @@ def _segm_mobilenet_v3(
     # features[7-10]: 80 channels
     # features[11-12]: 112 channels (C3)
     # features[13-15]: 160 channels (C4)
-    # features[16]: last conv (960 channels)
+    # features[16]: last conv (960 channels) - IMPORTANT for feature representation
 
     # For low_level_features: use layers 0-3 (outputs 24 channels at stride 4)
-    # For high_level_features: layers 4-15 (outputs 160 channels)
+    # For high_level_features: layers 4-16 (outputs 960 channels with final expansion)
     backbone.low_level_features = backbone.features[:4]  # Outputs 24 channels
-    backbone.high_level_features = backbone.features[4:-1]  # Outputs 160 channels
+    backbone.high_level_features = backbone.features[4:]  # Outputs 960 channels (includes expansion layer)
     backbone.features = None
     backbone.classifier = None
     backbone.avgpool = None
 
-    inplanes = 160
+    inplanes = 960  # Changed from 160 to 960
     if name == "deeplabv3plus":
         return_layers = {
             "high_level_features": "out",
@@ -222,17 +222,17 @@ def _segm_mobilenet_v3_attention(
     # features[7-10]: 80 channels
     # features[11-12]: 112 channels (C3)
     # features[13-15]: 160 channels (C4)
-    # features[16]: last conv (960 channels)
+    # features[16]: last conv (960 channels) - IMPORTANT for feature representation
 
     # For low_level_features: use layers 0-3 (outputs 24 channels at stride 4)
-    # For high_level_features: layers 4-15 (outputs 160 channels)
+    # For high_level_features: layers 4-16 (outputs 960 channels with final expansion)
     backbone.low_level_features = backbone.features[:4]  # Outputs 24 channels
-    backbone.high_level_features = backbone.features[4:-1]  # Outputs 160 channels
+    backbone.high_level_features = backbone.features[4:]  # Outputs 960 channels (includes expansion layer)
     backbone.features = None
     backbone.classifier = None
     backbone.avgpool = None
 
-    inplanes = 160
+    inplanes = 960  # Changed from 160 to 960
     if name == "deeplabv3plus_attention":
         return_layers = {
             "high_level_features": "out",

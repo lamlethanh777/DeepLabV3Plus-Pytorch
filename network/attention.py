@@ -29,8 +29,9 @@ class ShuffleAttention(nn.Module):
     def __init__(self, channels, groups=64):
         super(ShuffleAttention, self).__init__()
         self.channels = channels
-        self.groups = groups
-        self.channels_per_group = channels // groups
+        # Adaptive groups: avoid too many groups for small channel counts
+        self.groups = min(groups, channels // 4)  # At least 4 channels per group
+        self.channels_per_group = channels // self.groups
         
         # Channel attention parameters (per group)
         self.channel_weight = nn.Parameter(torch.zeros(1, channels // 2, 1, 1))
@@ -41,6 +42,14 @@ class ShuffleAttention(nn.Module):
         self.spatial_bias = nn.Parameter(torch.ones(1, channels // 2, 1, 1))
         
         self.gn = nn.GroupNorm(channels // 2, channels // 2)
+        self._init_weights()
+    
+    def _init_weights(self):
+        """Initialize parameters with small values for stable training."""
+        nn.init.constant_(self.channel_weight, 0.01)
+        nn.init.constant_(self.channel_bias, 1.0)
+        nn.init.constant_(self.spatial_weight, 0.01)
+        nn.init.constant_(self.spatial_bias, 1.0)
         
     def forward(self, x):
         b, c, h, w = x.shape

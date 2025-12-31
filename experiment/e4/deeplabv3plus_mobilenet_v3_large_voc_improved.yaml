@@ -1,0 +1,54 @@
+# DeepLabV3+ MobileNetV3 on PASCAL VOC - IMPROVED VERSION
+# Key improvements:
+# - Fixed 960-channel feature extraction
+# - Warmup learning rate
+# - Gradient clipping
+# - Better optimizer settings
+
+# Dataset settings
+dataset: voc
+data_root: ./datasets/data
+num_classes: 21
+year: 2012_aug
+
+# Model settings
+model: deeplabv3plus_mobilenet_v3_large
+output_stride: 16
+separable_conv: false
+
+# Training settings
+total_itrs: 30000
+batch_size: 16
+val_batch_size: 1
+crop_size: 513
+crop_val: false
+
+# Optimizer settings - slightly lower LR for better convergence
+lr: 0.007 # Reduced from 0.01
+lr_policy: poly
+warmup_iters: 1000 # Add warmup
+step_size: 10000
+weight_decay: 0.0001
+momentum: 0.9
+
+# Loss settings
+loss_type: cross_entropy
+
+# Checkpointing
+save_ckpt_path: ./experiment/e4/checkpoints
+continue_training: false
+
+# Validation
+val_interval: 100
+save_val_results: false
+
+# Logging
+print_interval: 10
+enable_vis: false
+vis_port: 13570
+vis_env: main
+vis_num_samples: 8
+
+# System
+gpu_id: "0"
+random_seed: 1
