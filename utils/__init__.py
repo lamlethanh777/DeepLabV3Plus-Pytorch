@@ -1,4 +1,4 @@
 from .utils import *
 from .visualizer import Visualizer
-from .scheduler import PolyLR
+from .scheduler import PolyLR, WarmupPolyLR
 from .loss import FocalLoss
