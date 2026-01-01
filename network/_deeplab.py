@@ -3,7 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from .utils import _SimpleSegmentationModel
-from .attention import ShuffleAttention, ECAAttention
+from .attention import ShuffleAttention, ECAAttention, EPSAttention, StripPooling
 
 
 __all__ = ["DeepLabV3"]
@@ -277,6 +277,209 @@ class DeepLabHeadV3PlusWithECA(nn.Module):
         # Concatenate and apply ECA attention
         fused = torch.cat([low_level_feature, output_feature], dim=1)  # (B, 304, H, W)
         fused = self.eca(fused)  # Apply ECA Attention
+        return self.classifier(fused)
+
+    def _init_weight(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight)
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+
+class ASPPWithStripPooling(nn.Module):
+    """
+    ASPP module with Strip Pooling replacing global average pooling.
+    
+    Based on the architecture diagram: uses 1×1 conv, 3 atrous convs (rates 6,12,18),
+    and Strip Pooling instead of global average pooling.
+    
+    Args:
+        in_channels (int): Number of input channels from backbone.
+        atrous_rates (list): Dilation rates for ASPP convolutions.
+        strip_pool_size (tuple): Pool sizes for strip pooling. Default: (20, 12).
+    """
+    
+    def __init__(self, in_channels, atrous_rates, strip_pool_size=(20, 12)):
+        super(ASPPWithStripPooling, self).__init__()
+        out_channels = 256
+        
+        # 1×1 conv branch
+        self.conv1x1 = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, 1, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=False),
+        )
+        
+        # 3 atrous conv branches
+        rate1, rate2, rate3 = tuple(atrous_rates)
+        self.aspp_conv1 = ASPPConv(in_channels, out_channels, rate1)
+        self.aspp_conv2 = ASPPConv(in_channels, out_channels, rate2)
+        self.aspp_conv3 = ASPPConv(in_channels, out_channels, rate3)
+        
+        # Strip Pooling branch (replaces global average pooling)
+        self.strip_pool = StripPooling(in_channels, out_channels, pool_size=strip_pool_size)
+
+        self.project = nn.Sequential(
+            nn.Conv2d(5 * out_channels, out_channels, 1, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=False),
+            nn.Dropout(0.1),
+        )
+
+    def forward(self, x):
+        res = []
+        res.append(self.conv1x1(x))
+        res.append(self.aspp_conv1(x))
+        res.append(self.aspp_conv2(x))
+        res.append(self.aspp_conv3(x))
+        res.append(self.strip_pool(x))
+        
+        res = torch.cat(res, dim=1)  # (B, 1280, H, W)
+        return self.project(res)
+
+
+class ASPPWithStripPoolingAndEPSA(nn.Module):
+    """
+    ASPP module with Strip Pooling and EPSA attention.
+    
+    Based on the architecture diagram:
+    - 1×1 conv, 3 atrous convs (rates 6,12,18), Strip Pooling
+    - Concatenate → 1×1 projection → EPSA attention
+    
+    Args:
+        in_channels (int): Number of input channels from backbone.
+        atrous_rates (list): Dilation rates for ASPP convolutions.
+        strip_pool_size (tuple): Pool sizes for strip pooling. Default: (20, 12).
+        epsa_splits (int): Number of splits for EPSA. Default: 4.
+    """
+    
+    def __init__(self, in_channels, atrous_rates, strip_pool_size=(20, 12), epsa_splits=4):
+        super(ASPPWithStripPoolingAndEPSA, self).__init__()
+        out_channels = 256
+        
+        # 1×1 conv branch
+        self.conv1x1 = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, 1, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=False),
+        )
+        
+        # 3 atrous conv branches
+        rate1, rate2, rate3 = tuple(atrous_rates)
+        self.aspp_conv1 = ASPPConv(in_channels, out_channels, rate1)
+        self.aspp_conv2 = ASPPConv(in_channels, out_channels, rate2)
+        self.aspp_conv3 = ASPPConv(in_channels, out_channels, rate3)
+        
+        # Strip Pooling branch (replaces global average pooling)
+        self.strip_pool = StripPooling(in_channels, out_channels, pool_size=strip_pool_size)
+
+        # 1×1 projection
+        self.project = nn.Sequential(
+            nn.Conv2d(5 * out_channels, out_channels, 1, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=False),
+            nn.Dropout(0.1),
+        )
+        
+        # EPSA attention after projection
+        self.epsa = EPSAttention(out_channels, num_splits=epsa_splits)
+
+    def forward(self, x):
+        res = []
+        res.append(self.conv1x1(x))
+        res.append(self.aspp_conv1(x))
+        res.append(self.aspp_conv2(x))
+        res.append(self.aspp_conv3(x))
+        res.append(self.strip_pool(x))
+        
+        res = torch.cat(res, dim=1)  # (B, 1280, H, W)
+        out = self.project(res)       # (B, 256, H, W)
+        out = self.epsa(out)          # Apply EPSA attention
+        return out
+
+
+class DeepLabHeadV3PlusWithEPSA(nn.Module):
+    """
+    DeepLabV3+ head matching the architecture diagram:
+    - ASPP with Strip Pooling + EPSA in encoder
+    - ECA on low-level features (after 1×1 conv, before concat) in decoder
+    
+    Args:
+        in_channels (int): Number of input channels from backbone high-level features.
+        low_level_channels (int): Number of channels in low-level features.
+        num_classes (int): Number of output segmentation classes.
+        aspp_dilate (list): Dilation rates for ASPP. Default: [6, 12, 18].
+        use_strip_pooling (bool): Use Strip Pooling in ASPP. Default: True.
+        strip_pool_size (tuple): Pool sizes for strip pooling. Default: (20, 12).
+        epsa_splits (int): Number of splits for EPSA. Default: 4.
+    """
+    
+    def __init__(
+        self, 
+        in_channels, 
+        low_level_channels, 
+        num_classes, 
+        aspp_dilate=[6, 12, 18],
+        use_strip_pooling=True,
+        strip_pool_size=(20, 12),
+        epsa_splits=4
+    ):
+        super(DeepLabHeadV3PlusWithEPSA, self).__init__()
+        
+        # Low-level feature projection with ECA
+        self.project = nn.Sequential(
+            nn.Conv2d(low_level_channels, 48, 1, bias=False),
+            nn.BatchNorm2d(48),
+            nn.ReLU(inplace=True),
+        )
+        # ECA on low-level features (as shown in diagram)
+        self.low_level_eca = ECAAttention(48)
+
+        # ASPP with Strip Pooling and EPSA
+        if use_strip_pooling:
+            self.aspp = ASPPWithStripPoolingAndEPSA(
+                in_channels, aspp_dilate, 
+                strip_pool_size=strip_pool_size,
+                epsa_splits=epsa_splits
+            )
+        else:
+            # Fallback to standard ASPP with EPSA only
+            self.aspp = ASPP(in_channels, aspp_dilate)
+            self.aspp_epsa = EPSAttention(256, num_splits=epsa_splits)
+        
+        self.use_strip_pooling = use_strip_pooling
+
+        self.classifier = nn.Sequential(
+            nn.Conv2d(304, 256, 3, padding=1, bias=False),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, num_classes, 1)
+        )
+        self._init_weight()
+
+    def forward(self, feature):
+        # Low-level features with ECA
+        low_level_feature = self.project(feature['low_level'])
+        low_level_feature = self.low_level_eca(low_level_feature)
+        
+        # Encoder features with ASPP + EPSA
+        if self.use_strip_pooling:
+            output_feature = self.aspp(feature['out'])
+        else:
+            output_feature = self.aspp(feature['out'])
+            output_feature = self.aspp_epsa(output_feature)
+        
+        # Upsample and concatenate
+        output_feature = F.interpolate(
+            output_feature, 
+            size=low_level_feature.shape[2:], 
+            mode='bilinear', 
+            align_corners=False
+        )
+        fused = torch.cat([low_level_feature, output_feature], dim=1)  # (B, 304, H, W)
+        
         return self.classifier(fused)
 
     def _init_weight(self):

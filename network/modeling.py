@@ -1,5 +1,5 @@
 from .utils import IntermediateLayerGetter
-from ._deeplab import DeepLabHead, DeepLabHeadV3Plus, DeepLabHeadV3PlusWithECA, DeepLabV3
+from ._deeplab import DeepLabHead, DeepLabHeadV3Plus, DeepLabHeadV3PlusWithECA, DeepLabHeadV3PlusWithEPSA, DeepLabV3
 from .backbone import resnet, mobilenetv2, mobilenetv3, hrnetv2, xception
 
 
@@ -658,4 +658,164 @@ def deeplabv3plus_mobilenet_v3_large_attention(
         pretrained_backbone=pretrained_backbone,
         use_shuffle_attention=use_shuffle_attention,
         shuffle_attention_groups=shuffle_attention_groups,
+    )
+
+
+# DeepLabV3+ with EPSA and Strip Pooling
+def _segm_mobilenet_epsa(
+    name, backbone_name, num_classes, output_stride, pretrained_backbone,
+    use_strip_pooling=True, strip_pool_size=(20, 12), epsa_splits=4
+):
+    """MobileNetV2 backbone with EPSA-augmented DeepLabV3+ head."""
+    aspp_dilate = [12, 24, 36] if output_stride == 8 else [6, 12, 18]
+    backbone = mobilenetv2.mobilenet_v2(
+        pretrained=pretrained_backbone, output_stride=output_stride
+    )
+
+    # rename layers
+    backbone.low_level_features = backbone.features[:4]
+    backbone.high_level_features = backbone.features[4:-1]
+    backbone.features = None
+    backbone.classifier = None
+
+    inplanes = 320
+    if name == "deeplabv3plus_epsa":
+        return_layers = {
+            "high_level_features": "out",
+            "low_level_features": "low_level",
+        }
+        low_level_planes = 24
+
+        classifier = DeepLabHeadV3PlusWithEPSA(
+            inplanes, low_level_planes, num_classes, aspp_dilate,
+            use_strip_pooling=use_strip_pooling,
+            strip_pool_size=strip_pool_size,
+            epsa_splits=epsa_splits
+        )
+    else:
+        raise ValueError(f"Unknown architecture: {name}")
+    
+    backbone = IntermediateLayerGetter(backbone, return_layers=return_layers)
+    return DeepLabV3(backbone, classifier)
+
+
+def _segm_resnet_epsa(
+    name, backbone_name, num_classes, output_stride, pretrained_backbone,
+    use_strip_pooling=True, strip_pool_size=(20, 12), epsa_splits=4
+):
+    """ResNet backbone with EPSA-augmented DeepLabV3+ head."""
+    if output_stride == 8:
+        replace_stride_with_dilation = [False, True, True]
+        aspp_dilate = [12, 24, 36]
+    else:
+        replace_stride_with_dilation = [False, False, True]
+        aspp_dilate = [6, 12, 18]
+
+    backbone = resnet.__dict__[backbone_name](
+        pretrained=pretrained_backbone,
+        replace_stride_with_dilation=replace_stride_with_dilation,
+    )
+
+    inplanes = 2048
+    if name == "deeplabv3plus_epsa":
+        return_layers = {"layer4": "out", "layer1": "low_level"}
+        low_level_planes = 256
+
+        classifier = DeepLabHeadV3PlusWithEPSA(
+            inplanes, low_level_planes, num_classes, aspp_dilate,
+            use_strip_pooling=use_strip_pooling,
+            strip_pool_size=strip_pool_size,
+            epsa_splits=epsa_splits
+        )
+    else:
+        raise ValueError(f"Unknown architecture: {name}")
+    
+    backbone = IntermediateLayerGetter(backbone, return_layers=return_layers)
+    return DeepLabV3(backbone, classifier)
+
+
+def deeplabv3plus_mobilenet_epsa(
+    num_classes=21, output_stride=8, pretrained_backbone=True,
+    use_strip_pooling=True, strip_pool_size=(20, 12), epsa_splits=4
+):
+    """Constructs a DeepLabV3+ model with MobileNetV2 backbone, EPSA and Strip Pooling.
+
+    Features Strip Pooling in ASPP (replacing global avg pool), EPSA after 
+    1×1 projection, and ECA on low-level features before fusion.
+
+    Args:
+        num_classes (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+        use_strip_pooling (bool): Use Strip Pooling in ASPP. Default: True.
+        strip_pool_size (tuple): Pool sizes for strip pooling. Default: (20, 12).
+        epsa_splits (int): Number of splits for EPSA. Default: 4.
+    """
+    return _segm_mobilenet_epsa(
+        "deeplabv3plus_epsa",
+        "mobilenetv2",
+        num_classes,
+        output_stride=output_stride,
+        pretrained_backbone=pretrained_backbone,
+        use_strip_pooling=use_strip_pooling,
+        strip_pool_size=strip_pool_size,
+        epsa_splits=epsa_splits,
+    )
+
+
+def deeplabv3plus_resnet50_epsa(
+    num_classes=21, output_stride=8, pretrained_backbone=True,
+    use_strip_pooling=True, strip_pool_size=(20, 12), epsa_splits=4
+):
+    """Constructs a DeepLabV3+ model with ResNet-50 backbone, EPSA and Strip Pooling.
+
+    Features Strip Pooling in ASPP (replacing global avg pool), EPSA after 
+    1×1 projection, and ECA on low-level features before fusion.
+
+    Args:
+        num_classes (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+        use_strip_pooling (bool): Use Strip Pooling in ASPP. Default: True.
+        strip_pool_size (tuple): Pool sizes for strip pooling. Default: (20, 12).
+        epsa_splits (int): Number of splits for EPSA. Default: 4.
+    """
+    return _segm_resnet_epsa(
+        "deeplabv3plus_epsa",
+        "resnet50",
+        num_classes,
+        output_stride=output_stride,
+        pretrained_backbone=pretrained_backbone,
+        use_strip_pooling=use_strip_pooling,
+        strip_pool_size=strip_pool_size,
+        epsa_splits=epsa_splits,
+    )
+
+
+def deeplabv3plus_resnet101_epsa(
+    num_classes=21, output_stride=8, pretrained_backbone=True,
+    use_strip_pooling=True, strip_pool_size=(20, 12), epsa_splits=4
+):
+    """Constructs a DeepLabV3+ model with ResNet-101 backbone, EPSA and Strip Pooling.
+
+    Features Strip Pooling in ASPP (replacing global avg pool), EPSA after 
+    1×1 projection, and ECA on low-level features before fusion.
+
+    Args:
+        num_classes (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+        use_strip_pooling (bool): Use Strip Pooling in ASPP. Default: True.
+        strip_pool_size (tuple): Pool sizes for strip pooling. Default: (20, 12).
+        epsa_splits (int): Number of splits for EPSA. Default: 4.
+    """
+    return _segm_resnet_epsa(
+        "deeplabv3plus_epsa",
+        "resnet101",
+        num_classes,
+        output_stride=output_stride,
+        pretrained_backbone=pretrained_backbone,
+        use_strip_pooling=use_strip_pooling,
+        strip_pool_size=strip_pool_size,
+        epsa_splits=epsa_splits,
     )

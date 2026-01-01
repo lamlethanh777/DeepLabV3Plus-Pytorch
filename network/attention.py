@@ -3,6 +3,8 @@ Attention modules for DeepLabV3+ variants.
 
 - ShuffleAttention: Channel shuffle + group-wise channel-spatial attention
 - ECAAttention: Efficient Channel Attention using 1D adaptive convolution
+- EPSAttention: Efficient Pyramid Split Attention
+- StripPooling: Strip pooling module for capturing long-range dependencies
 """
 
 import math
@@ -139,3 +141,164 @@ class ECAAttention(nn.Module):
         y = torch.sigmoid(y)
         
         return x * y
+
+
+class EPSAttention(nn.Module):
+    """
+    Efficient Pyramid Split Attention Module.
+    
+    Splits channels into multiple groups, applies multi-scale convolutions,
+    and uses softmax attention to weight different scales.
+    
+    Reference: "EPSANet: An Efficient Pyramid Split Attention Block"
+    https://arxiv.org/abs/2105.14447
+    
+    Args:
+        channels (int): Number of input channels.
+        num_splits (int): Number of channel splits/scales. Default: 4.
+        reduction (int): Channel reduction ratio for attention. Default: 4.
+    """
+    
+    def __init__(self, channels, num_splits=4, reduction=4):
+        super(EPSAttention, self).__init__()
+        self.channels = channels
+        self.num_splits = num_splits
+        self.split_channels = channels // num_splits
+        
+        # Multi-scale convolutions for each split
+        self.convs = nn.ModuleList()
+        for i in range(num_splits):
+            # Increasing kernel sizes: 3, 5, 7, 9...
+            kernel_size = 3 + i * 2
+            padding = kernel_size // 2
+            self.convs.append(nn.Sequential(
+                nn.Conv2d(self.split_channels, self.split_channels, 
+                         kernel_size=kernel_size, padding=padding, 
+                         groups=self.split_channels, bias=False),
+                nn.BatchNorm2d(self.split_channels),
+                nn.ReLU(inplace=True)
+            ))
+        
+        # Squeeze-and-Excitation style attention
+        reduced_channels = max(channels // reduction, 8)
+        self.se_conv1 = nn.Conv2d(channels, reduced_channels, 1, bias=False)
+        self.se_bn = nn.BatchNorm2d(reduced_channels)
+        self.se_relu = nn.ReLU(inplace=True)
+        self.se_conv2 = nn.Conv2d(reduced_channels, num_splits, 1, bias=False)
+        
+        self._init_weight()
+    
+    def _init_weight(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+    
+    def forward(self, x):
+        b, c, h, w = x.shape
+        
+        # Split along channel dimension
+        splits = torch.chunk(x, self.num_splits, dim=1)
+        
+        # Apply multi-scale convolutions
+        feats = []
+        for i, (split, conv) in enumerate(zip(splits, self.convs)):
+            feats.append(conv(split))
+        
+        # Stack for attention: (B, num_splits, split_channels, H, W)
+        feats_stack = torch.stack(feats, dim=1)
+        
+        # Global pooling for attention weights
+        feats_sum = sum(feats)  # (B, split_channels, H, W)
+        # Expand to full channels for SE
+        feats_cat = torch.cat(feats, dim=1)  # (B, C, H, W)
+        gap = F.adaptive_avg_pool2d(feats_cat, 1)  # (B, C, 1, 1)
+        
+        # SE attention to get split weights
+        attn = self.se_conv1(gap)
+        attn = self.se_bn(attn)
+        attn = self.se_relu(attn)
+        attn = self.se_conv2(attn)  # (B, num_splits, 1, 1)
+        attn = F.softmax(attn, dim=1)  # Softmax over splits
+        
+        # Apply attention weights
+        attn = attn.unsqueeze(2)  # (B, num_splits, 1, 1, 1)
+        out = (feats_stack * attn).sum(dim=1)  # (B, split_channels, H, W)
+        
+        # Expand back to original channels
+        out = out.repeat(1, self.num_splits, 1, 1)
+        
+        return out
+
+
+class StripPooling(nn.Module):
+    """
+    Strip Pooling Module for capturing long-range dependencies.
+    
+    Uses horizontal and vertical strip average pooling to capture
+    global context in both directions, then fuses with local features.
+    
+    Reference: "Strip Pooling: Rethinking Spatial Pooling for Scene Parsing"
+    https://arxiv.org/abs/2003.13328
+    
+    Args:
+        in_channels (int): Number of input channels.
+        out_channels (int): Number of output channels.
+        pool_size (tuple): Pool sizes for (horizontal_height, vertical_width). Default: (20, 12).
+    """
+    
+    def __init__(self, in_channels, out_channels, pool_size=(20, 12)):
+        super(StripPooling, self).__init__()
+        self.pool_h, self.pool_w = pool_size
+        
+        # Horizontal strip pooling branch (pool across width)
+        self.pool_h_branch = nn.Sequential(
+            nn.AdaptiveAvgPool2d((self.pool_h, 1)),
+            nn.Conv2d(in_channels, out_channels, 1, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
+        
+        # Vertical strip pooling branch (pool across height)  
+        self.pool_w_branch = nn.Sequential(
+            nn.AdaptiveAvgPool2d((1, self.pool_w)),
+            nn.Conv2d(in_channels, out_channels, 1, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
+        
+        # Fusion convolution
+        self.fusion = nn.Sequential(
+            nn.Conv2d(out_channels, out_channels, 3, padding=1, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
+        
+        self._init_weight()
+    
+    def _init_weight(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+    
+    def forward(self, x):
+        _, _, h, w = x.shape
+        
+        # Horizontal strip pooling -> expand back
+        x_h = self.pool_h_branch(x)
+        x_h = F.interpolate(x_h, size=(h, w), mode='bilinear', align_corners=False)
+        
+        # Vertical strip pooling -> expand back
+        x_w = self.pool_w_branch(x)
+        x_w = F.interpolate(x_w, size=(h, w), mode='bilinear', align_corners=False)
+        
+        # Fuse horizontal and vertical
+        out = x_h + x_w
+        out = self.fusion(out)
+        
+        return out
