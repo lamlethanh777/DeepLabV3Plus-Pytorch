@@ -4,7 +4,7 @@
 
 # Dataset settings
 dataset: voc
-data_root: ./datasets/data/voc
+data_root: ./datasets/data
 num_classes: 21
 year: 2012_aug
 
@@ -31,7 +31,7 @@ momentum: 0.9
 loss_type: cross_entropy
 
 # Checkpointing
-ckpt: ./checkpoints/best_deeplabv3plus_mobilenet_epsa_voc_os16.pth
+ckpt: ./e5/checkpoints/latest_deeplabv3plus_mobilenet_epsa_voc_os16.pth
 continue_training: false
 
 # Validation
