@@ -1,0 +1,213 @@
+% \documentclass[conference]{IEEEtran}
+% \IEEEoverridecommandlockouts
+% % The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+% \usepackage{cite}
+% \usepackage{amsmath,amssymb,amsfonts}
+% \usepackage{algorithmic}
+% \usepackage{graphicx}
+% \usepackage{textcomp}
+% \usepackage{xcolor}
+% % \usepackage[default]{fontsetup} % Disabled: causes subscripted 3s in section headings
+% \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+%     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+% \begin{document}
+
+% \title{Revisiting DeepLabV3: Efficient Context and Attention Enhancements for Semantic Segmentation}
+
+% \author{\IEEEauthorblockN{Lam T. Le}
+%     \IEEEauthorblockA{\textit{Faculty of Computer Science} \\
+%         \textit{VNU-HCM University of Science}\\
+%         Ho Chi Minh City, Vietnam \\
+%         ltlam22@apcs.fitus.edu.vn}
+%     \and
+%     \IEEEauthorblockN{Thong C. Nguyen}
+%     \IEEEauthorblockA{\textit{Faculty of Computer Science} \\
+%         \textit{VNU-HCM University of Science}\\
+%         Ho Chi Minh City, Vietnam \\
+%         ncthong22@apcs.fitus.edu.vn}
+%     \and
+%     \IEEEauthorblockN{Thong H. Nguyen}
+%     \IEEEauthorblockA{\textit{Faculty of Computer Science} \\
+%         \textit{VNU-HCM University of Science}\\
+%         Ho Chi Minh City, Vietnam \\
+%         nvhthong22@apcs.fitus.edu.vn}
+% }
+
+% \maketitle
+
+% \begin{abstract}
+%     This report presents our group’s baseline model for semantic segmentation, built upon the DeepLabV3 framework. We selected DeepLabV3 due to its central role in modern segmentation research, its introduction of key methodological advances, and the influence of its Atrous Spatial Pyramid Pooling (ASPP) module on subsequent architectures. The report details the model’s architecture, the original training configuration proposed by its authors, and our own fine-tuning strategy on the Cityscapes dataset. For the backbone, we use MobileNetV3-Large, chosen for its efficiency-driven design, which aligns with our aim of optimizing computational cost while maintaining competitive accuracy. After evaluation, our baseline model achieves 70\% mIoU on the Cityscapes test set, with a total capacity of 50 million parameters and a computational cost of 15 GFLOPs, establishing a reference point for subsequent improvements.
+% \end{abstract}
+
+% \begin{IEEEkeywords}
+%     semantic segmentation, DeeplabV3, atrous spatial pyramid pooling, baseline model
+% \end{IEEEkeywords}
+
+% \section{Introduction}
+% Semantic segmentation is a core task in computer vision that aims to assign a semantic label to every pixel in an image. Unlike image classification or object detection, segmentation demands both global scene understanding and fine-grained spatial precision. This dual requirement makes it fundamental in domains where detailed structural information is essential, such as autonomous driving, medical imaging, environmental analysis, and robotics.
+
+% \par
+
+% Over the past decade, the landscape of semantic segmentation has evolved rapidly. Early fully convolutional networks~\cite{fcn} demonstrated that dense prediction could be achieved end-to-end, but struggled with multi-scale context and resolution loss caused by repeated downsampling. Subsequent advances focused on expanding receptive fields, improving feature fusion, and balancing accuracy with compute efficiency. Modern approaches fall broadly into two streams: CNN-based architectures that refine hierarchical feature extraction, and transformer-based models that leverage global attention for improved context modeling. Despite the rise of transformers, high-quality CNN solutions remain highly relevant—especially in scenarios where computational resources, latency, or memory budgets are constrained.
+
+% \par
+
+% DeepLabV3~\cite{deeplabv3} stands out as one of the most influential CNN-based segmentation models in this progression. Its introduction of atrous convolutions and the Atrous Spatial Pyramid Pooling (ASPP) module addressed two long-standing challenges: capturing multi-scale context without excessive computation, and recovering spatial detail without relying on heavy decoder structures. These design choices allowed DeepLabV3 to set new performance standards while remaining flexible enough to pair with lightweight backbones like MobileNet~\cite{mobilenetv3}. As a result, it continues to serve as a strong baseline model and a conceptual foundation for many subsequent segmentation methods.
+
+% \section{DeepLabV3 Architecture}
+
+% DeepLabV3~\cite{deeplabv3} is a semantic segmentation architecture designed to improve dense pixel-wise prediction by addressing two longstanding challenges: the substantial loss of spatial resolution in deep convolutional networks and the need for robust multi-scale contextual understanding. Building upon earlier DeepLab variants, DeepLabV3 refines the use of atrous (dilated) convolution and introduces a strengthened multi-scale context module, Atrous Spatial Pyramid Pooling (ASPP), enabling the network to capture fine details and global semantics without relying on complex post-processing such as fully-connected Conditional Random Fields.
+
+% \par
+
+% The architecture modifies conventional backbone networks---typically ResNet-50/101~\cite{resnet} or MobileNet-based encoders~\cite{mobilenetv3}---to preserve higher-resolution feature maps. Standard classification networks reduce spatial resolution by a factor of 32 via strided convolutions and pooling, which significantly limits dense prediction accuracy. DeepLabV3 counters this by removing the final spatial downsampling steps and replacing the corresponding convolutions with atrous convolutions using stride~1. Atrous convolution enlarges the effective receptive field without increasing the number of parameters or computational cost. Given a convolutional kernel of size $k$ and dilation rate $r$, the effective receptive field becomes $k_\mathrm{eff} = k + (k - 1)(r - 1)$, enabling deeper layers to incorporate broader context while maintaining a manageable feature-map resolution. In practice, output strides of 16 or 8 are commonly used, the latter providing higher fidelity at the cost of increased memory consumption.
+
+% \par
+
+% At the core of DeepLabV3 lies the ASPP module, which aggregates contextual information over multiple spatial scales. Instead of relying on a single dilation rate, ASPP processes the encoder feature map through several parallel convolutional paths: a non-dilated $1{\times}1$ convolution, multiple $3{\times}3$ atrous convolutions each with a distinct dilation rate, and a global average pooling path that captures scene-level semantics. The parallel atrous convolutions ensure sensitivity to objects of varying sizes by sampling the input at complementary spatial intervals. The global pooling branch, in contrast, provides holistic contextual cues that help resolve locally ambiguous predictions. After processing, the outputs of all branches are upsampled (when necessary), concatenated along the channel dimension, and projected through a $1{\times}1$ convolution followed by batch normalization and a nonlinear activation. This design circumvents the ``gridding'' issue associated with large or harmonically aligned dilation rates by incorporating heterogeneous sampling patterns and combining them with global information.
+
+% \par
+
+% Following ASPP, the decoder stage in DeepLabV3 is minimal: the enriched feature map is passed through a final $1{\times}1$ convolution that maps it to the number of segmentation classes, after which bilinear interpolation restores full image resolution. Although simple, this structure is effective due to the high-quality, multi-scale representation generated by the encoder and ASPP. By forgoing explicit decoder refinement and CRF-based post-processing, DeepLabV3 achieves a favorable balance of accuracy, architectural simplicity, and computational efficiency.
+
+% \par
+
+% Overall, DeepLabV3 demonstrates that carefully calibrated dilated convolutions, combined with a principled multi-scale aggregation mechanism, can significantly enhance semantic segmentation performance without introducing excessive architectural complexity. Its modular structure, compatibility with a wide range of backbones, and strong empirical results on benchmarks such as Cityscapes~\cite{cityscapes} and PASCAL VOC~\cite{pascalvoc} have established it as a robust and widely adopted baseline for contemporary segmentation research.
+
+% \section{Dataset Overview}
+
+% We adopt the pretrained DeepLabV3 model with a MobileNetV3-Large backbone~\cite{mobilenetv3} from the \texttt{torchvision} segmentation models library. This model is pretrained on the COCO dataset~\cite{coco} with Pascal VOC~2012 label mappings~\cite{pascalvoc}, following training practices consistent with the original DeepLabV3 work~\cite{deeplabv3}. The DeepLab authors report that additional fine-tuning on Pascal VOC~2012 can lead to meaningful improvements in segmentation quality. We initially attempted to incorporate this step; however, the official evaluation server for the Pascal VOC~2012 test split has been unavailable for an extended period, making it infeasible to obtain standardized test-set performance metrics. To ensure that our evaluation remains comparable, reproducible, and aligned with current research practice, we therefore select the Cityscapes dataset as our fine-tuning target. Cityscapes is widely used in contemporary semantic segmentation research, offers high-quality annotations, and is supported by an actively maintained evaluation server, making it a reliable and convenient benchmark.
+
+% \par
+
+% The Cityscapes dataset~\cite{cityscapes} is a large-scale, high-resolution dataset focused on urban street scenes captured from 50 cities across Germany and neighboring regions. Its primary objective is to support the development and evaluation of models for urban scene understanding, with particular emphasis on fine-grained pixel-level semantic labels relevant to autonomous driving. The dataset contains $5{,}000$ finely annotated images split into $2{,}975$ training, $500$ validation, and $1{,}525$ test images. An additional set of $20{,}000$ coarsely annotated images provides further diversity for applications where fine-grained labels are not strictly required. Each image has a resolution of $2048\times1024$ pixels, presenting a challenging scenario in terms of memory usage and computational cost. The fine annotations specify $30$ semantic classes, $19$ of which are used for evaluation following established practice, covering categories such as road, sidewalk, buildings, vegetation, traffic participants, and road signage.
+
+% \par
+
+% Beyond its scale and quality, Cityscapes offers several characteristics that make it particularly suitable for evaluating modern semantic segmentation models. First, the dataset exhibits significant scene diversity despite being captured in a consistent domain: weather conditions, illumination, traffic density, and architectural styles vary meaningfully across cities. Second, the annotation protocol is extremely precise, especially for object boundaries, which has historically highlighted the strengths and weaknesses of segmentation architectures with differing abilities to recover spatial detail. Third, the dataset includes a well-defined evaluation protocol centered on mean Intersection-over-Union (mIoU), with a long-standing public leaderboard that enables fair comparisons across methods and time. As a result, Cityscapes has served as the primary benchmark for many advancements in segmentation, including DeepLab variants, PSPNet, HRNet, and lightweight real-time architectures such as ICNet and BiSeNet.
+
+% \par
+
+% For our work, Cityscapes provides several advantages beyond benchmarking. Its urban focus and high-resolution labels allow us to assess the behavior of DeepLabV3 in environments with complex geometry, cluttered foreground objects, and fine structural details such as poles, traffic signs, and pedestrians. The large object scale variation and presence of thin or elongated structures challenge the model's multi-scale reasoning and boundary sensitivity, offering insights into both the strengths and limitations of the DeepLabV3 architecture when combined with the MobileNetV3-Large backbone. Moreover, because the dataset's label taxonomy is widely adopted, the trained model remains compatible with many downstream tasks in autonomous driving and robotics, further increasing its practical relevance.
+
+% \par
+
+% Overall, the Cityscapes dataset serves not only as a robust fine-tuning target but also as an informative environment for evaluating the representational capacity and generalization behavior of modern semantic segmentation networks. Its combination of annotation precision, scene diversity, and strong community support makes it an effective and dependable choice for our experimental study.
+
+% \section{Methodology}
+
+% Our fine-tuning methodology adapts the pretrained DeepLabV3 model to the Cityscapes semantic segmentation task while adhering to established best practices in transfer learning and dense prediction training. The overall approach consists of three stages: model adaptation, data augmentation, and optimization with careful hyperparameter selection.
+
+% \subsection{Model Adaptation}
+
+% We initialize the network from the official \texttt{torchvision} DeepLabV3 checkpoint pretrained on COCO~\cite{coco} with Pascal VOC~\cite{pascalvoc} label mappings. Since Cityscapes defines 19 evaluation classes rather than the 21 classes used in Pascal VOC, we replace the final classification layers in both the main decoder head and the auxiliary classifier with new convolutional layers projecting to the appropriate number of output channels. These newly introduced layers are initialized using Kaiming (He) initialization, which is well-suited for layers followed by ReLU activations and promotes stable gradient flow during early training. All other pretrained weights remain intact, preserving the rich feature representations learned from the large-scale COCO dataset.
+
+% \subsection{Data Augmentation}
+
+% To improve generalization and robustness, we employ a standard augmentation pipeline commonly used in semantic segmentation research. During training, each image undergoes random resizing with a scale factor sampled uniformly between 0.5 and 2.0 times a base size of 1024 pixels, followed by padding if necessary and a random square crop of $768 \times 768$ pixels. Random horizontal flipping is also applied with 50\% probability. These augmentations expose the model to a wide range of object scales and spatial configurations, reducing overfitting and encouraging invariance to common geometric transformations. For validation, images are resized to preserve aspect ratio without additional augmentation, ensuring consistent and reproducible evaluation. Overall, we did not applied any sofisticated data augmentation techniques beyond standard image transformations to reserve the baseline nature of the model.
+
+% \subsection{Optimization Strategy}
+
+% We optimize the network using stochastic gradient descent (SGD) with momentum set to 0.9, a standard choice for training deep networks. Weight decay regularization is applied to convolutional weights but excluded from bias terms and batch normalization parameters, following established conventions that prevent unnecessary penalization of scale and shift parameters. Learning rate scheduling follows a polynomial decay policy with power 0.9, which gradually reduces the learning rate over the course of training and has been shown to yield stable convergence in segmentation tasks.
+
+% \par
+
+% A key aspect of our optimization strategy is the use of differential learning rates. The pretrained backbone, which already encodes general visual features, is trained with a learning rate reduced by a factor of 10 relative to the newly initialized classification heads. This asymmetry allows the classifier to adapt quickly to the new label space while preserving the quality of backbone representations and avoiding catastrophic forgetting. Additionally, we employ an auxiliary loss branch during training, weighted at 0.5 relative to the main loss, which provides intermediate supervision and has been shown to facilitate gradient flow and accelerate convergence in deep encoder--decoder architectures.
+
+% \par
+
+% Training is performed using mixed-precision arithmetic (automatic mixed precision) on GPU hardware, which reduces memory consumption and accelerates computation without sacrificing numerical stability. The cross-entropy loss with an ignore index handles the void class present in Cityscapes annotations, ensuring that unlabeled or ambiguous pixels do not contribute to the gradient signal. We monitor validation performance using mean Intersection-over-Union (mIoU), the standard metric for Cityscapes evaluation, and retain the checkpoint achieving the highest mIoU for final evaluation.
+
+% \section{Evaluation and Results}
+
+% \subsection{Evaluation Metric}
+
+% We evaluate segmentation performance using mean Intersection-over-Union (mIoU), the standard metric adopted by the Cityscapes benchmark~\cite{cityscapes} and the broader semantic segmentation community. For each class $c$, the Intersection-over-Union (IoU) is defined as the ratio of the intersection between predicted and ground-truth pixels to their union:
+% \begin{equation}
+%     \text{IoU}_c = \frac{|P_c \cap G_c|}{|P_c \cup G_c|}
+% \end{equation}
+% where $P_c$ and $G_c$ denote the sets of pixels predicted and labeled as class $c$, respectively. The mean IoU is then computed by averaging IoU scores across all $N$ evaluation classes:
+% \begin{equation}
+%     \text{mIoU} = \frac{1}{N} \sum_{c=1}^{N} \text{IoU}_c
+% \end{equation}
+% This metric penalizes both false positives and false negatives, providing a balanced assessment of segmentation quality that reflects both precision and recall at the pixel level.
+
+% \subsection{Model Specifications}
+
+% Table~\ref{tab:model_specs} summarizes the architectural specifications of our baseline model. The network processes Cityscapes images at their native resolution of $1024 \times 2048$ pixels and outputs dense predictions over 19 semantic classes. The total parameter count is 11.03 million, with a computational cost of 79.56 GFLOPs per forward pass.
+
+% \begin{table}[htbp]
+%     \centering
+%     \caption{Model Specifications}
+%     \label{tab:model_specs}
+%     \begin{tabular}{l r}
+%         \hline
+%         \textbf{Specification} & \textbf{Value}     \\
+%         \hline
+%         Architecture           & DeepLabV3          \\
+%         Backbone               & MobileNetV3-Large  \\
+%         Number of Classes      & 19                 \\
+%         Input Resolution       & $1024 \times 2048$ \\
+%         Total Parameters       & 11.03M             \\
+%         FLOPs                  & 79.56G             \\
+%         \hline
+%     \end{tabular}
+% \end{table}
+
+% A breakdown of parameter distribution across model components is provided in Table~\ref{tab:param_breakdown}. Notably, the classifier head---which encompasses the ASPP module and the final projection layers---accounts for the majority of learnable parameters (73.0\%), while the MobileNetV3-Large backbone contributes only 26.9\%. This distribution reflects the lightweight design philosophy of MobileNet backbones, which prioritize computational efficiency through depthwise separable convolutions and inverted residual blocks. The auxiliary classifier, used only during training to provide intermediate supervision, adds a negligible 3.83K parameters.
+
+% \begin{table}[htbp]
+%     \centering
+%     \caption{Parameter Distribution by Component}
+%     \label{tab:param_breakdown}
+%     \begin{tabular}{l r r}
+%         \hline
+%         \textbf{Component}              & \textbf{Parameters} & \textbf{Proportion} \\
+%         \hline
+%         Backbone (MobileNetV3-Large)    & 2.97M               & 26.9\%              \\
+%         Classifier (DeepLabHead + ASPP) & 8.05M               & 73.0\%              \\
+%         Auxiliary Classifier            & 3.83K               & $<$0.1\%            \\
+%         \hline
+%         \textbf{Total}                  & \textbf{11.03M}     & \textbf{100\%}      \\
+%         \hline
+%     \end{tabular}
+% \end{table}
+
+% \subsection{Segmentation Performance}
+
+% After fine-tuning on the Cityscapes training set following the methodology described in Section~IV, our baseline model achieves a mean IoU of 59.25\% on the validation split. This result is somewhat lower than initially anticipated based on reported benchmarks for similar configurations. We attribute this gap to potential suboptimalities in our training setup, including hyperparameter choices such as learning rate schedules, batch size constraints imposed by available GPU memory, or insufficient training duration. Further investigation is warranted to identify the specific factors limiting performance and to refine the training protocol accordingly. Nevertheless, the current result establishes a concrete baseline against which future architectural modifications and training improvements can be measured. Unfortunately, we cannot provide test set results at this time, as evaluation on the Cityscapes test split takes time to be processed by the official evaluation server.
+
+% \par
+
+% Figure~\ref{fig:qualitative} presents a qualitative example of our model's segmentation output on a sample image from the Cityscapes validation set. The visualization includes the original input image, the predicted segmentation mask, an overlay of the prediction on the original image, and the ground-truth annotation for comparison. The model successfully identifies major scene components such as roads, buildings, vegetation, and vehicles. However, fine-grained details and object boundaries exhibit some imprecision, consistent with the quantitative mIoU gap discussed above.
+
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=\columnwidth]{img/demo.png}
+%     \caption{Qualitative segmentation result on a Cityscapes validation image. Clockwise from top-left: original image, predicted segmentation mask, ground-truth annotation, and overlay of prediction on the original image.}
+%     \label{fig:qualitative}
+% \end{figure}
+
+% \section{Conclusion}
+
+% In this report, we have presented our baseline model for semantic segmentation, built upon the DeepLabV3 architecture with a MobileNetV3-Large backbone. We provided a detailed overview of the DeepLabV3 framework, highlighting its use of atrous convolutions and the Atrous Spatial Pyramid Pooling (ASPP) module to capture multi-scale contextual information while maintaining computational efficiency. The model was fine-tuned on the Cityscapes dataset using standard training practices, including data augmentation, differential learning rates, polynomial learning rate decay, and auxiliary loss supervision.
+
+% \par
+
+% Our baseline achieves a mean IoU of 59.25\% on the Cityscapes validation set, with a compact model size of 11.03 million parameters and a computational cost of 79.56 GFLOPs. While this result falls short of state-of-the-art performance, it provides a concrete reference point for future work. The gap between our current results and reported benchmarks suggests opportunities for improvement through hyperparameter tuning, extended training schedules, or more sophisticated augmentation strategies.
+
+% \par
+
+% Looking ahead, we plan to investigate the factors limiting our baseline's performance and explore architectural enhancements such as attention mechanisms, improved decoder designs, or alternative backbone networks. Additionally, we aim to evaluate the model on the official Cityscapes test server once processing is complete, enabling a more comprehensive comparison with existing methods. This baseline establishes the foundation upon which we will build more advanced segmentation solutions in subsequent stages of our project.
+
+% \begin{thebibliography}{00}
+%     \bibitem{deeplabv3} L.-C. Chen, G. Papandreou, F. Schroff, and H. Adam, ``Rethinking atrous convolution for semantic image segmentation,'' arXiv preprint arXiv:1706.05587, 2017.
+%     \bibitem{mobilenetv3} A. Howard, M. Sandler, G. Chu, L.-C. Chen, B. Chen, M. Tan, W. Wang, Y. Zhu, R. Pang, V. Vasudevan, Q. V. Le, and H. Adam, ``Searching for MobileNetV3,'' in \textit{Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV)}, 2019, pp. 1314--1324.
+%     \bibitem{cityscapes} M. Cordts, M. Omran, S. Ramos, T. Rehfeld, M. Enzweiler, R. Benenson, U. Franke, S. Roth, and B. Schiele, ``The Cityscapes dataset for semantic urban scene understanding,'' in \textit{Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2016, pp. 3213--3223.
+%     \bibitem{coco} T.-Y. Lin, M. Maire, S. Belongie, J. Hays, P. Perona, D. Ramanan, P. Doll{\'a}r, and C. L. Zitnick, ``Microsoft COCO: Common objects in context,'' in \textit{Proc. Eur. Conf. Comput. Vis. (ECCV)}, 2014, pp. 740--755.
+%     \bibitem{pascalvoc} M. Everingham, L. Van Gool, C. K. I. Williams, J. Winn, and A. Zisserman, ``The Pascal Visual Object Classes (VOC) challenge,'' \textit{Int. J. Comput. Vis.}, vol. 88, no. 2, pp. 303--338, 2010.
+%     \bibitem{fcn} J. Long, E. Shelhamer, and T. Darrell, ``Fully convolutional networks for semantic segmentation,'' in \textit{Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2015, pp. 3431--3440.
+%     \bibitem{resnet} K. He, X. Zhang, S. Ren, and J. Sun, ``Deep residual learning for image recognition,'' in \textit{Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2016, pp. 770--778.
+% \end{thebibliography}
+
+% \end{document}

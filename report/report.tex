@@ -1,0 +1,500 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{adjustbox}
+\usepackage{url}
+% \usepackage[default]{fontsetup} % Disabled: causes subscripted 3s in section headings
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\begin{document}
+
+\title{Revisiting DeepLabV3: Efficient Context and Attention Enhancements for Semantic Segmentation}
+
+\author{\IEEEauthorblockN{Lam T. Le}
+    \IEEEauthorblockA{\textit{Faculty of Computer Science} \\
+        \textit{VNU-HCM University of Science}\\
+        Ho Chi Minh City, Vietnam \\
+        ltlam22@apcs.fitus.edu.vn}
+    \and
+    \IEEEauthorblockN{Thong C. Nguyen}
+    \IEEEauthorblockA{\textit{Faculty of Computer Science} \\
+        \textit{VNU-HCM University of Science}\\
+        Ho Chi Minh City, Vietnam \\
+        ncthong22@apcs.fitus.edu.vn}
+    \and
+    \IEEEauthorblockN{Thong H. Nguyen}
+    \IEEEauthorblockA{\textit{Faculty of Computer Science} \\
+        \textit{VNU-HCM University of Science}\\
+        Ho Chi Minh City, Vietnam \\
+        nvhthong22@apcs.fitus.edu.vn}
+}
+
+\maketitle
+
+\begin{abstract}
+    Semantic segmentation remains a fundamental challenge in computer vision, requiring models that balance multi-scale contextual understanding with fine-grained spatial precision. This paper investigates attention-augmented variants of the DeepLabV3+ architecture, a widely adopted encoder-decoder framework for dense prediction. We propose two lightweight attention integration strategies: (1) Shuffle Attention combined with Efficient Channel Attention (SA-ECA), and (2) Strip Pooling with Efficient Pyramid Split Attention (SP-EPSA). These modules are strategically inserted into the Atrous Spatial Pyramid Pooling (ASPP) encoder and decoder stages to enhance feature discrimination with minimal computational overhead. Experiments on PASCAL VOC 2012 and Cityscapes demonstrate that our SP-EPSA variant achieves 74.62\% mIoU on Cityscapes, a +2.55\% improvement over the baseline, while adding only 0.7M parameters and 0.6 GFLOPs. On PASCAL VOC, the SA-ECA variant yields a +1.31\% mIoU gain with negligible overhead. Our results indicate that the effectiveness of attention mechanisms is dataset-dependent, with strip pooling providing greater benefits for structured urban scenes. The proposed methods maintain the efficiency advantages of MobileNet backbones, making them suitable for resource-constrained deployment scenarios.
+\end{abstract}
+
+\begin{IEEEkeywords}
+    semantic segmentation, DeepLabV3+, attention mechanisms, atrous spatial pyramid pooling, efficient channel attention, strip pooling
+\end{IEEEkeywords}
+
+\section{Introduction}
+
+Semantic segmentation, the task of assigning a semantic class label to every pixel in an image, represents a cornerstone problem in computer vision. Unlike image-level classification or bounding-box detection, segmentation requires models to reason simultaneously about global scene semantics and local spatial structure. This dual requirement has driven significant research interest, with applications spanning autonomous navigation~\cite{cityscapes}, medical image analysis, remote sensing, and robotic perception.
+
+The evolution of semantic segmentation methods has been marked by several pivotal developments. Early fully convolutional networks (FCNs)~\cite{fcn} established the viability of end-to-end dense prediction, yet suffered from limited receptive fields and resolution degradation induced by successive pooling operations. Subsequent architectures addressed these limitations through various strategies: encoder-decoder designs for multi-scale feature aggregation, dilated (atrous) convolutions for expanded receptive fields without spatial downsampling, and pyramid pooling modules for capturing context at multiple scales.
+
+The DeepLab family of architectures~\cite{deeplabv3} has been particularly influential in advancing CNN-based segmentation. DeepLabV3 introduced Atrous Spatial Pyramid Pooling (ASPP), which applies parallel atrous convolutions at multiple dilation rates to capture multi-scale contextual information efficiently. This design proved highly effective, establishing DeepLabV3 as a strong baseline that remains competitive with more recent methods. DeepLabV3+~\cite{chen2018encoder} extended this framework by incorporating a lightweight decoder module that fuses low-level features from the encoder backbone with the semantically rich ASPP output. This encoder-decoder structure enables the recovery of fine spatial details, particularly along object boundaries, while preserving the computational efficiency of the original design.
+
+Despite the recent emergence of vision transformers and attention-based architectures for dense prediction, CNN-based methods such as DeepLabV3+ remain highly relevant for practical deployment. Their favorable trade-offs between accuracy, computational cost, and memory footprint make them particularly suitable for resource-constrained scenarios, including mobile devices and edge computing platforms. When paired with efficient backbones such as MobileNetV2~\cite{sandler2018mobilenetv2} or MobileNetV3~\cite{mobilenetv3}, DeepLabV3+ achieves competitive segmentation quality at a fraction of the computational budget required by heavier architectures.
+
+In this work, we investigate the integration of lightweight attention mechanisms into the DeepLabV3+ framework to enhance feature representation without sacrificing efficiency. Attention modules have demonstrated consistent improvements across various vision tasks by enabling networks to selectively emphasize informative features while suppressing irrelevant ones. We propose two attention augmentation strategies: (1) combining Shuffle Attention with Efficient Channel Attention (SA-ECA) at the ASPP and decoder fusion stages, and (2) replacing global average pooling in ASPP with Strip Pooling while adding Efficient Pyramid Split Attention (SP-EPSA) for multi-scale refinement. Our experiments on PASCAL VOC 2012 and Cityscapes demonstrate that these modifications yield meaningful improvements in segmentation accuracy with minimal overhead.
+
+The principal contributions of this paper are as follows:
+\begin{itemize}
+    \item We propose two attention-augmented DeepLabV3+ variants that strategically integrate lightweight attention modules at the encoder and decoder stages.
+    \item We provide a systematic evaluation on two benchmark datasets, revealing that the optimal attention configuration is dataset-dependent.
+    \item We demonstrate that the SP-EPSA variant achieves a +2.55\% mIoU improvement on Cityscapes while adding only 13\% additional parameters, establishing a favorable accuracy-efficiency trade-off.
+\end{itemize}
+
+
+
+\section{Related Work}
+\label{sec:related}
+
+Semantic segmentation has evolved from early fully convolutional networks (FCNs), which enabled end-to-end dense prediction~\cite{fcn}, to encoder--decoder designs such as U-Net~\cite{unet} that recover spatial detail using skip connections. A recurring theme is the need to fuse local detail with global context. Representative CNN-based approaches explicitly model multi-scale context through pooling or pyramid aggregation (e.g., PSPNet~\cite{pspnet}) and through dilated (atrous) convolutions, as popularized by the DeepLab family~\cite{deeplabv3,chen2018encoder}. DeepLabV3 introduced Atrous Spatial Pyramid Pooling (ASPP) to capture multi-scale context with parallel atrous convolutions, while DeepLabV3+ further improved boundary quality by adding a lightweight decoder that fuses low-level and high-level features.
+
+Beyond accuracy, practical deployment has driven interest in efficient segmentation systems. One direction is to pair strong decoders with lightweight backbones such as MobileNetV2~\cite{sandler2018mobilenetv2} and MobileNetV3~\cite{mobilenetv3}, reducing parameter count and memory bandwidth while retaining reasonable representational capacity. Another direction develops segmentation-specific real-time networks (e.g., ENet~\cite{enet}, BiSeNet~\cite{bisenet}, Fast-SCNN~\cite{fastscnn}) that carefully allocate computation between low-resolution context extraction and high-resolution detail preservation.
+
+Attention mechanisms are widely used to improve representation quality with modest overhead by reweighting features based on global or local evidence. Channel attention was popularized by squeeze-and-excitation (SE) blocks~\cite{senet}, and CBAM~\cite{cbam} extended this idea with an additional spatial attention component. For efficiency, ECA-Net~\cite{wang2020eca} revisits channel attention by removing the dimensionality-reduction bottleneck of SE and modeling cross-channel interactions using a lightweight 1D convolution whose kernel size is adapted to the channel dimension. This design provides a favorable accuracy--complexity trade-off, making it attractive for lightweight backbones and dense prediction heads.
+
+Complementary to single-branch channel reweighting, pyramid-structured attention seeks to encode multi-scale cues within an attention block. EPSANet~\cite{hu2021epsa} proposes Efficient Pyramid Split Attention (EPSA) to produce multi-scale feature branches (via split-and-transform with different receptive fields) and to aggregate them using attention weights normalized across branches. Such multi-branch designs are particularly relevant to segmentation, where objects and structures appear at diverse scales and where context aggregation must remain computationally efficient.
+
+Context modeling modules specialized for scene parsing are also closely related. Strip Pooling~\cite{hou2020strip} replaces isotropic global pooling with directional (horizontal/vertical) pooling, preserving anisotropic long-range structure while maintaining local sensitivity in the orthogonal dimension. This is especially pertinent for urban-scene segmentation, where elongated structures (e.g., roads and buildings) exhibit strong directional priors.
+
+Recent lightweight DeepLabV3+ variants increasingly combine efficient backbones with lightweight attention and context modules. LM-DeeplabV3+~\cite{hou2024lmdeeplab} integrates ECA on shallow features, introduces strip pooling within ASPP, and adds EPSA-style refinement, demonstrating that carefully placed lightweight modules can improve Cityscapes performance under constrained compute. LAE-DeepLabV3+~\cite{yang2025lae} similarly targets road-scene segmentation by using MobileNetV2 as backbone, adopting depthwise separable convolutions in ASPP for efficiency, and augmenting DeepLabV3+ with Shuffle Attention~\cite{zhang2021sa} after ASPP and ECA-based channel refinement near the output.
+
+Our work complements these efforts by focusing on two modular augmentation strategies within an otherwise standard DeepLabV3+ pipeline: (i) inserting Shuffle Attention after ASPP feature concatenation and applying ECA at the decoder fusion (SA-ECA), and (ii) emphasizing structured-context aggregation via strip pooling combined with EPSA refinement (SP-EPSA). By evaluating on both PASCAL VOC and Cityscapes, we highlight the dataset-dependent behavior of lightweight attention/context modules and provide an implementation-oriented comparison under consistent training and evaluation protocols.
+
+
+
+% Methodology and Experiment Sections for DeepLabV3+ with Attention Mechanisms Paper
+
+\section{Methodology}
+\label{sec:methodology}
+
+This section presents the proposed attention-augmented DeepLabV3+ architecture. We first describe the baseline DeepLabV3+ model, then detail two attention integration strategies designed to enhance feature representation at multiple stages of the network.
+
+\subsection{Baseline Architecture: DeepLabV3+}
+
+DeepLabV3+~\cite{chen2018encoder} extends the DeepLabV3 architecture by incorporating a decoder module that refines segmentation boundaries through multi-scale feature fusion. The encoder comprises a convolutional backbone network---such as ResNet~\cite{resnet}, MobileNetV2~\cite{sandler2018mobilenetv2}, or MobileNetV3~\cite{mobilenetv3}---followed by an Atrous Spatial Pyramid Pooling (ASPP) module that extracts multi-scale contextual features.
+
+The ASPP module captures contextual information at multiple scales through parallel atrous convolutions with varying dilation rates. For an output stride of 16, the standard dilation rates are $(6, 12, 18)$, whereas output stride 8 employs rates of $(12, 24, 36)$. The module consists of five parallel branches:
+\begin{enumerate}
+    \item A $1 \times 1$ convolution
+    \item Three $3 \times 3$ atrous convolutions with dilation rates $r_1$, $r_2$, $r_3$
+    \item Global average pooling followed by $1 \times 1$ convolution
+\end{enumerate}
+
+The outputs from all branches are concatenated along the channel dimension (resulting in 1280 channels for 256-channel branch outputs) and projected to 256 channels via a $1 \times 1$ convolution.
+
+The decoder module fuses low-level features from early backbone layers with the high-level ASPP output. Specifically, low-level features are first reduced to 48 channels via a $1 \times 1$ convolution. The ASPP output is bilinearly upsampled to match the low-level feature spatial resolution, then concatenated with the low-level features to form a 304-channel tensor. This fused representation is processed by a $3 \times 3$ convolution followed by the final classification layer.
+
+\subsection{Attention Mechanisms}
+
+Attention mechanisms have proven effective for enhancing feature representations in convolutional neural networks by enabling selective emphasis on informative features. We integrate attention modules at strategic locations within the DeepLabV3+ architecture to improve feature discrimination and inter-channel relationships. Two distinct integration strategies are investigated, each employing different combinations of attention modules optimized for different aspects of the segmentation task.
+
+\subsubsection{Shuffle Attention}
+
+Shuffle Attention (SA)~\cite{zhang2021sa} is a lightweight attention module that combines channel and spatial attention through a group-wise processing strategy. Given an input feature map $\mathbf{X} \in \mathbb{R}^{C \times H \times W}$, Shuffle Attention operates as follows:
+
+\begin{enumerate}
+    \item \textbf{Channel Grouping}: The input is reshaped into $G$ groups, where $G = \min(64, C/4)$ to ensure at least 4 channels per group.
+
+    \item \textbf{Sub-feature Splitting}: Each group is split into two sub-features along the channel dimension for parallel channel and spatial attention computation.
+
+    \item \textbf{Channel Attention Branch}: For the first sub-feature $\mathbf{X}_1$, global average pooling is applied followed by learnable scaling:
+          \begin{equation}
+              \mathbf{X}_1' = \mathbf{X}_1 \odot \sigma(\mathbf{w}_c \cdot \text{GAP}(\mathbf{X}_1) + \mathbf{b}_c)
+          \end{equation}
+          where $\mathbf{w}_c$ and $\mathbf{b}_c$ are learnable parameters, $\sigma$ denotes the sigmoid function, and $\odot$ represents element-wise multiplication.
+
+    \item \textbf{Spatial Attention Branch}: For the second sub-feature $\mathbf{X}_2$, group normalization is applied followed by learnable scaling:
+          \begin{equation}
+              \mathbf{X}_2' = \mathbf{X}_2 \odot \sigma(\mathbf{w}_s \cdot \text{GN}(\mathbf{X}_2) + \mathbf{b}_s)
+          \end{equation}
+
+    \item \textbf{Channel Shuffle}: The processed sub-features are concatenated and channel-shuffled across groups to enable cross-group information flow.
+\end{enumerate}
+
+\subsubsection{Efficient Channel Attention (ECA)}
+
+Efficient Channel Attention~\cite{wang2020eca} provides a parameter-efficient approach to channel attention by replacing fully-connected layers with 1D convolution. The kernel size $k$ is adaptively determined based on the channel count $C$:
+\begin{equation}
+    k = \left| \frac{\log_2(C)}{\gamma} + \frac{\beta}{\gamma} \right|_{\text{odd}}
+\end{equation}
+where $\gamma = 2$ and $\beta = 1$ are hyperparameters, and $|\cdot|_{\text{odd}}$ denotes rounding to the nearest odd number.
+
+The ECA module operates as:
+\begin{equation}
+    \mathbf{Y} = \mathbf{X} \odot \sigma(\text{Conv1D}_k(\text{GAP}(\mathbf{X})))
+\end{equation}
+where $\text{Conv1D}_k$ denotes a 1D convolution with kernel size $k$ applied across the channel dimension.
+
+\subsubsection{Efficient Pyramid Split Attention (EPSA)}
+
+EPSA~\cite{hu2021epsa} captures multi-scale channel-spatial attention through a pyramid split strategy. The input feature map is divided into $S$ splits along the channel dimension, and each split is processed by a depthwise convolution with progressively increasing kernel sizes $(3, 5, 7, 9, \ldots)$. The multi-scale features are then weighted using a squeeze-and-excitation style attention mechanism with softmax normalization across splits:
+\begin{equation}
+    \mathbf{Y} = \sum_{i=1}^{S} \alpha_i \cdot f_i(\mathbf{X}_i)
+\end{equation}
+where $\mathbf{X}_i$ is the $i$-th channel split, $f_i$ is the corresponding multi-scale convolution, and $\alpha_i$ are softmax-normalized attention weights.
+In our implementation, the attention-weighted output is expanded back to the original channel dimension $C$ to preserve interface compatibility with the subsequent decoder blocks.
+
+\subsubsection{Strip Pooling}
+
+Strip Pooling~\cite{hou2020strip} captures long-range dependencies along horizontal and vertical directions through strip-shaped average pooling. Given an input feature $\mathbf{X}$, the module applies:
+\begin{itemize}
+    \item Horizontal strip pooling: $\text{AdaptiveAvgPool}_{(H', 1)}$ followed by $1 \times 1$ convolution
+    \item Vertical strip pooling: $\text{AdaptiveAvgPool}_{(1, W')}$ followed by $1 \times 1$ convolution
+\end{itemize}
+
+Both pooled features are bilinearly interpolated back to the original spatial resolution and fused via element-wise addition, followed by a $3 \times 3$ convolution. The default pool sizes are $H' = 20$ and $W' = 12$.
+
+\subsection{Proposed Architectures}
+
+Building upon the attention mechanisms described above, we propose two attention-augmented DeepLabV3+ variants. Each variant strategically places attention modules at different locations within the network architecture to address specific aspects of the segmentation task.
+
+\subsubsection{Approach 1: Shuffle Attention + ECA (SA-ECA)}
+
+The first approach integrates attention at two key locations:
+
+\begin{enumerate}
+    \item \textbf{ASPP with Shuffle Attention}: After concatenating the five ASPP branches (1280 channels), we apply Shuffle Attention before the $1 \times 1$ projection convolution. This allows the network to recalibrate multi-scale feature representations by emphasizing informative channels and spatial locations.
+
+    \item \textbf{Decoder with ECA}: After fusing low-level features with upsampled ASPP output (304 channels), we apply ECA to refine the channel-wise feature response. The lightweight nature of ECA makes it suitable for the decoder where computational efficiency is important.
+\end{enumerate}
+
+The forward pass for the SA-ECA head is:
+\begin{align}
+    \mathbf{F}_{\text{aspp}} & = \text{Concat}[\text{ASPP}_1(\mathbf{X}), \ldots, \text{ASPP}_5(\mathbf{X})]       \\
+    \mathbf{F}_{\text{sa}}   & = \text{ShuffleAttention}(\mathbf{F}_{\text{aspp}})                                 \\
+    \mathbf{F}_{\text{proj}} & = \text{Conv}_{1 \times 1}(\mathbf{F}_{\text{sa}})                                  \\
+    \mathbf{F}_{\text{low}}  & = \text{Conv}_{1 \times 1}(\mathbf{X}_{\text{low}})                                 \\
+    \mathbf{F}_{\text{fuse}} & = \text{Concat}[\mathbf{F}_{\text{low}}, \text{Upsample}(\mathbf{F}_{\text{proj}})] \\
+    \mathbf{F}_{\text{eca}}  & = \text{ECA}(\mathbf{F}_{\text{fuse}})                                              \\
+    \mathbf{Y}               & = \text{Classifier}(\mathbf{F}_{\text{eca}})
+\end{align}
+
+\subsubsection{Approach 2: Strip Pooling + EPSA + ECA (SP-EPSA)}
+
+The second approach replaces Shuffle Attention with more sophisticated modules:
+
+\begin{enumerate}
+    \item \textbf{ASPP with Strip Pooling}: We replace the global average pooling branch in ASPP with Strip Pooling to capture long-range dependencies along horizontal and vertical directions. This provides richer contextual information for scene parsing.
+
+    \item \textbf{EPSA after ASPP Projection}: After the $1 \times 1$ projection (256 channels), we apply EPSA to introduce multi-scale channel attention with pyramid split. We use 4 splits by default.
+
+    \item \textbf{ECA on Low-Level Features}: Before concatenating low-level features with the ASPP output, we apply ECA to the 48-channel low-level features to refine boundary information.
+\end{enumerate}
+
+The forward pass for the SP-EPSA head is:
+{\small
+\begin{align}
+    \mathbf{F}_{\text{aspp}} & = \text{Concat}[\text{C}_{1\times1}, \text{AC}_1, \text{AC}_2, \text{AC}_3, \text{SP}](\mathbf{X}) \\
+    \mathbf{F}_{\text{proj}} & = \text{C}_{1 \times 1}(\mathbf{F}_{\text{aspp}})                                                  \\
+    \mathbf{F}_{\text{epsa}} & = \text{EPSA}(\mathbf{F}_{\text{proj}})                                                            \\
+    \mathbf{F}_{\text{low}}  & = \text{ECA}(\text{C}_{1 \times 1}(\mathbf{X}_{\text{low}}))                                       \\
+    \mathbf{F}_{\text{fuse}} & = \text{Concat}[\mathbf{F}_{\text{low}}, \text{Up}(\mathbf{F}_{\text{epsa}})]                      \\
+    \mathbf{Y}               & = \text{Cls}(\mathbf{F}_{\text{fuse}})
+\end{align}
+where C denotes Conv, AC denotes ASPPConv, SP denotes StripPool, Up denotes Upsample, and Cls denotes Classifier.
+}
+
+\subsection{Backbone Networks}
+
+We evaluate our attention-augmented architectures with two lightweight backbone networks:
+
+\textbf{MobileNetV2}~\cite{sandler2018mobilenetv2} employs inverted residual blocks with linear bottlenecks, achieving an efficient balance between representational capacity and computational cost. For integration with DeepLabV3+, low-level features (24 channels) are extracted from the fourth layer, while high-level features (320 channels) are obtained from the penultimate layer.
+
+\textbf{MobileNetV3-Large}~\cite{mobilenetv3} incorporates neural architecture search-derived improvements, including squeeze-and-excitation modules and hard-swish activations. Low-level features (24 channels) are extracted from the fourth layer, with high-level features (960 channels, including the final expansion layer) providing richer semantic representations. Notably, the built-in squeeze-and-excitation blocks in MobileNetV3 introduce a potential interaction with our additional attention modules, which we analyze in the experimental evaluation.
+
+
+\section{Experiments}
+\label{sec:experiments}
+
+This section presents a comprehensive evaluation of the proposed attention-augmented DeepLabV3+ variants. We first describe the benchmark datasets, followed by implementation details, and conclude with quantitative results and analysis.
+
+\subsection{Datasets}
+
+Experiments are conducted on two widely-adopted semantic segmentation benchmarks that present complementary challenges.
+
+\textbf{PASCAL VOC 2012}~\cite{pascalvoc} comprises 21 semantic classes, including 20 foreground object categories and background. Following established practice, we employ the augmented training set containing 10,582 images and evaluate on the original validation set of 1,449 images. The dataset features diverse object categories at varying scales, with typical image resolutions around $500 \times 375$ pixels.
+
+\textbf{Cityscapes}~\cite{cityscapes} provides high-resolution urban scene imagery with 19 semantic classes relevant to autonomous driving applications. The dataset contains 2,975 training images and 500 validation images, each captured at $2048 \times 1024$ resolution. The structured nature of urban scenes and the presence of elongated objects (roads, buildings, poles) make this dataset particularly suitable for evaluating contextual aggregation mechanisms.
+
+\subsection{Implementation Details}
+
+Our implementation builds upon the faithful PyTorch reimplementation of DeepLabV3/DeepLabV3+ by Fang (VainF)~\cite{vainf_deeplabv3plus_pytorch}, and adds the attention-augmented heads and backbone variants described in Section~\ref{sec:methodology}. All experiments are implemented in PyTorch and conducted on NVIDIA GPUs with CUDA acceleration. The following configurations are employed for training and evaluation.
+
+\subsubsection{Training Configuration}
+
+\begin{table}[h]
+    \centering
+    \small
+    \caption{Training hyperparameters for different datasets}
+    \label{tab:hyperparams}
+    \begin{tabular}{lcc}
+        \toprule
+        \textbf{Hyperparameter} & \textbf{VOC}       & \textbf{Cityscapes} \\
+        \midrule
+        Total Iterations        & 30,000             & 30,000              \\
+        Batch Size              & 16                 & 8--16               \\
+        Base Learning Rate      & 0.01               & 0.1                 \\
+        LR Policy               & Poly ($p=0.9$)     & Poly ($p=0.9$)      \\
+        Weight Decay            & $1 \times 10^{-4}$ & $1 \times 10^{-4}$  \\
+        Momentum                & 0.9                & 0.9                 \\
+        Crop Size               & $513 \times 513$   & $768 \times 768$    \\
+        Output Stride           & 16                 & 16                  \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Unless otherwise stated, the results reported in this paper follow the above defaults (30k iterations, Poly LR schedule). We additionally include one exploratory ``improved'' MobileNetV3-Large recipe that uses warmup and longer training (see Section~\ref{sec:experiments}, Training Stability).
+
+For reproducibility, we release our full training and evaluation code, including the exact configurations used to obtain the reported results.
+
+\subsubsection{Optimization}
+
+We use Stochastic Gradient Descent (SGD) with momentum. Following the common practice in semantic segmentation, we apply differential learning rates: the backbone network uses $0.1 \times$ the base learning rate, while the classifier (ASPP and decoder) uses the full learning rate. This allows the pretrained backbone to be fine-tuned more conservatively.
+
+The polynomial learning rate schedule is defined as:
+\begin{equation}
+    lr = lr_{\text{base}} \times \left(1 - \frac{\text{iter}}{\text{max\_iter}}\right)^{0.9}
+\end{equation}
+
+We use cross-entropy loss with an ignore index of 255 for unlabeled pixels. Gradient clipping (max norm = 1.0) is applied to prevent exploding gradients.
+
+\subsubsection{Data Augmentation}
+
+For training, we apply the following augmentations:
+\begin{itemize}
+    \item Random scaling with scale factors uniformly sampled from $[0.5, 2.0]$
+    \item Random cropping to the target crop size with padding if necessary
+    \item Random horizontal flipping with probability 0.5
+    \item Color jittering (Cityscapes only): brightness, contrast, and saturation with factor 0.5
+\end{itemize}
+
+All images are normalized using ImageNet statistics (mean = $[0.485, 0.456, 0.406]$, std = $[0.229, 0.224, 0.225]$).
+
+\subsubsection{Attention Module Initialization}
+
+For stable training of attention modules, we initialize:
+\begin{itemize}
+    \item Shuffle Attention scaling weights to 0.01 and biases to 1.0
+    \item All 2D convolutional layers inside attention modules using Kaiming normal initialization
+    \item Batch normalization layers with weight = 1 and bias = 0
+\end{itemize}
+
+\subsection{Evaluation Metrics}
+
+We evaluate segmentation performance using the following metrics:
+
+\begin{itemize}
+    \item \textbf{Mean Intersection over Union (mIoU)}: The primary metric, computed as the average IoU across all classes:
+          \begin{equation}
+              \text{mIoU} = \frac{1}{K} \sum_{i=1}^{K} \frac{\text{TP}_i}{\text{TP}_i + \text{FP}_i + \text{FN}_i}
+          \end{equation}
+
+    \item \textbf{Overall Accuracy (OA)}: Pixel-level classification accuracy:
+          \begin{equation}
+              \text{OA} = \frac{\sum_{i=1}^{K} \text{TP}_i}{\sum_{i=1}^{K} (\text{TP}_i + \text{FN}_i)}
+          \end{equation}
+
+    \item \textbf{Mean Accuracy (MA)}: Average per-class accuracy.
+
+    \item \textbf{Frequency-Weighted Accuracy (FWAcc)}: Class accuracy weighted by class frequency.
+\end{itemize}
+
+\subsection{Experimental Results}
+
+We first present a comprehensive comparison of model complexity and performance across all variants, followed by detailed per-dataset analysis.
+
+\subsubsection{Model Complexity Analysis}
+
+Table~\ref{tab:model_comparison} summarizes the parameter counts, computational costs (measured in GFLOPs at $513 \times 513$ input resolution), and segmentation performance for each model variant. For consistency, parameter/FLOP counts are computed with output stride 16 and $\texttt{num\_classes}=21$ (VOC setting); for Cityscapes ($19$ classes) the classifier layer is slightly smaller.
+
+\begin{table}[h]
+    \centering
+    \small
+    \caption{Model complexity and performance comparison. GFLOPs measured at $513 \times 513$ input resolution (single-scale). Parameter/FLOP counts are computed using $\texttt{num\_classes}=21$ for comparability across variants.}
+    \label{tab:model_comparison}
+    \begin{tabular}{llcccc}
+        \toprule
+        \textbf{Model} & \textbf{Backbone} & \textbf{\#Params} & \textbf{GFLOPs} & \textbf{VOC}   & \textbf{City}  \\
+                       &                   & \textbf{(M)}      &                 & \textbf{mIoU}  & \textbf{mIoU}  \\
+        \midrule
+        Baseline       & MNv2              & 5.23              & 17.01           & 66.65          & 72.07          \\
+        Baseline       & MNv3-L            & 11.14             & 21.69           & 54.23          & 63.74          \\
+        \midrule
+        SA-ECA         & MNv2              & 5.23              & 17.01           & \textbf{67.96} & 71.05          \\
+        SA-ECA         & MNv3-L            & 11.14             & 21.69           & 54.17          & 63.28          \\
+        \midrule
+        SP-EPSA        & MNv2              & 5.93              & 17.63           & 65.45          & \textbf{74.62} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+The SA-ECA variant introduces negligible overhead (a $\sim$0.004M parameter increase with unchanged GFLOPs at the reported precision), while SP-EPSA adds approximately 0.7M parameters (+13\%) and 0.62 GFLOPs (+3.6\%). Notably, MobileNetV3-Large, despite having more than twice the parameters of MobileNetV2, consistently underperforms across all configurations; we hypothesize this may be related to interactions between its built-in squeeze-and-excitation blocks and the additional attention modules.
+
+\subsubsection{PASCAL VOC 2012}
+
+Table~\ref{tab:voc_results} presents detailed segmentation metrics on the PASCAL VOC 2012 validation set.
+
+\begin{table}[h]
+    \centering
+    \caption{Semantic segmentation results on PASCAL VOC 2012 validation set}
+    \label{tab:voc_results}
+    \resizebox{\columnwidth}{!}{%
+        \begin{tabular}{lccccc}
+            \toprule
+            \textbf{Model}   & \textbf{Backbone} & \textbf{OA}    & \textbf{MA}    & \textbf{FWAcc} & \textbf{mIoU}  \\
+            \midrule
+            DLv3+ (baseline) & MNv2              & 91.84          & 77.92          & 85.67          & 66.65          \\
+            DLv3+            & MNv3-L            & 87.98          & 67.66          & 79.75          & 54.23          \\
+            \midrule
+            DLv3+ SA-ECA     & MNv2              & \textbf{91.97} & \textbf{79.39} & \textbf{85.99} & \textbf{67.96} \\
+            DLv3+ SA-ECA     & MNv3-L            & 87.98          & 67.95          & 79.68          & 54.17          \\
+            \midrule
+            DLv3+ SP-EPSA    & MNv2              & 91.47          & 77.11          & 85.00          & 65.45          \\
+            \bottomrule
+        \end{tabular}%
+    }
+\end{table}
+
+Several observations emerge from these results. First, the SA-ECA variant with MobileNetV2 achieves the highest performance on this dataset, improving mIoU by +1.31 percentage points over the baseline (67.96\% vs.\ 66.65\%). This improvement is accompanied by gains across all metrics, indicating consistent enhancement rather than class-specific biases. Second, MobileNetV3-Large consistently underperforms MobileNetV2 despite its more sophisticated architecture, suggesting that the built-in squeeze-and-excitation modules may interfere with the additional attention mechanisms. Third, the SP-EPSA variant shows marginally lower performance than the baseline on VOC, indicating that the strip pooling and EPSA modules may be less suited to the diverse object categories present in this dataset.
+
+\subsubsection{Cityscapes}
+
+Table~\ref{tab:cityscapes_results} presents the segmentation results on Cityscapes validation set.
+
+\begin{table}[h]
+    \centering
+    \caption{Semantic segmentation results on Cityscapes validation set}
+    \label{tab:cityscapes_results}
+    \resizebox{\columnwidth}{!}{%
+        \begin{tabular}{lccccc}
+            \toprule
+            \textbf{Model}   & \textbf{Backbone} & \textbf{OA}    & \textbf{MA}    & \textbf{FWAcc} & \textbf{mIoU}  \\
+            \midrule
+            DLv3+ (baseline) & MNv2              & 95.25          & 80.06          & 91.28          & 72.07          \\
+            DLv3+            & MNv3-L            & 93.93          & 72.91          & 89.07          & 63.74          \\
+            \midrule
+            DLv3+ SA-ECA     & MNv2              & 95.15          & 80.31          & 91.14          & 71.05          \\
+            DLv3+ SA-ECA     & MNv3-L            & 94.02          & 72.14          & 89.24          & 63.28          \\
+            \midrule
+            DLv3+ SP-EPSA    & MNv2              & \textbf{95.46} & \textbf{82.72} & \textbf{91.66} & \textbf{74.62} \\
+            \bottomrule
+        \end{tabular}%
+    }
+\end{table}
+
+The results on Cityscapes reveal a markedly different pattern compared to VOC. The SP-EPSA variant achieves the highest performance, outperforming the baseline by +2.55 percentage points (74.62\% vs.\ 72.07\%). This substantial improvement can be attributed to the effectiveness of strip pooling for capturing long-range dependencies along horizontal and vertical directions---a property particularly beneficial for urban scenes containing elongated structures such as roads, buildings, and poles. Conversely, the SA-ECA variant slightly underperforms the baseline on Cityscapes ($-$1.02\% mIoU), suggesting that the optimal attention configuration is dataset-dependent. The consistent underperformance of MobileNetV3-Large is more pronounced on Cityscapes, with an 8+ percentage point gap relative to MobileNetV2.
+
+Due to memory constraints, we conduct MobileNetV3-Large runs using smaller batch sizes (e.g., batch size 8 for Cityscapes in our MobileNetV3-Large SA-ECA run). While the overall trend (MobileNetV2 outperforming MobileNetV3-Large under our training setup) is consistent, batch size differences can affect optimization dynamics and should be considered when comparing backbones.
+
+\subsection{Analysis}
+
+\subsubsection{Attention Mechanism Effectiveness}
+
+The experimental results reveal that attention mechanism effectiveness depends critically on two factors. First, \textit{dataset characteristics} strongly influence the optimal attention configuration: Strip Pooling combined with EPSA excels on Cityscapes, where structured urban scenes benefit from directional context aggregation, whereas SA-ECA proves more effective on VOC with its diverse object categories and less regular spatial layouts. Second, \textit{backbone architecture} plays a significant role: MobileNetV3-Large, which incorporates built-in squeeze-and-excitation blocks, derives minimal benefit from the additional attention mechanisms and may even experience performance degradation. In contrast, MobileNetV2's simpler architecture provides a more receptive substrate for attention augmentation.
+
+\subsubsection{Strip Pooling vs.\ Global Average Pooling}
+
+The superior performance of SP-EPSA on Cityscapes provides empirical support for the hypothesis that strip pooling offers advantages over global average pooling for scenes with anisotropic structure. Urban environments contain numerous elongated elements---roads extending horizontally, buildings and poles rising vertically---whose spatial characteristics are better preserved by directional pooling operations. The strip pooling module captures these long-range dependencies while maintaining orientation information that global average pooling would discard.
+
+\subsubsection{Computational Considerations}
+
+Both proposed approaches are designed for minimal computational overhead, aligning with the efficiency requirements of mobile deployment scenarios. Shuffle Attention employs group-wise operations with learned scalar parameters, introducing negligible additional computation. ECA utilizes a single 1D convolution with adaptive kernel size (typically $k \leq 7$), requiring only $\mathcal{O}(k)$ additional parameters. EPSA leverages depthwise separable convolutions in its multi-scale branches, maintaining efficiency while enabling multi-scale reasoning. Strip Pooling adds two pooling operations with standard convolutions, representing the most significant overhead among the proposed modules. As shown in Table~\ref{tab:model_comparison}, the SA-ECA variant increases parameters only marginally while maintaining the same GFLOPs to the reported precision, whereas SP-EPSA incurs a modest 13\% parameter increase and 3.6\% computational overhead.
+
+\subsubsection{Training Stability}
+
+Attention modules introduce additional optimization challenges, particularly when combined with backbones that already incorporate attention-like mechanisms. We observed training instability in several MobileNetV3-Large configurations, manifesting as oscillating validation metrics and suboptimal convergence. Mitigation strategies including warmup learning rate schedules (1000--1500 iterations) and reduced learning rates (e.g., 0.007 in our improved MobileNetV3-Large runs) yielded inconsistent results, suggesting that architectural modifications rather than training recipe adjustments may be necessary for successful integration of external attention modules with attention-equipped backbones.
+
+\subsection{Comparison with Prior Work}
+
+Our retested DeepLabV3+ baseline with MobileNetV2 achieves 66.65\% mIoU on VOC and 72.07\% on Cityscapes. Published DeepLabV3+ numbers vary substantially with backbone choice, pretraining, crop/multi-scale evaluation, and training schedules; as such, direct comparisons are only meaningful under matched protocols. Our best-performing model, SP-EPSA with MobileNetV2, achieves 74.62\% mIoU on Cityscapes, representing a +2.55 percentage point improvement over the baseline while maintaining the lightweight characteristics suitable for resource-constrained deployment.
+
+\subsection{Limitations}
+
+Several limitations of this work warrant acknowledgment. First, performance gains vary substantially across datasets: improvements are more modest on VOC than on Cityscapes, suggesting that the proposed attention mechanisms may be better suited for structured scene parsing than for datasets with diverse object categories. Second, integration with MobileNetV3-Large remains challenging, with the backbone's built-in squeeze-and-excitation blocks potentially conflicting with additional attention modules. Third, the attention module hyperparameters (e.g., group count in Shuffle Attention, number of splits in EPSA) were not extensively tuned, leaving room for further optimization. Finally, we evaluate only on validation sets; official test server evaluation would provide more definitive performance comparisons.
+
+\par
+
+\section{Discussion}
+
+\subsection{Interpreting gains without ablations}
+
+Our empirical results suggest that lightweight attention/context modules can be beneficial, but the strength of the conclusion differs across variants. The SA-ECA model introduces two changes (Shuffle Attention in ASPP and ECA on the fused decoder features) and yields a modest improvement on VOC, whereas SP-EPSA bundles three components (Strip Pooling, EPSA, and low-level ECA) and yields a larger gain on Cityscapes. Without component-wise ablations, we cannot attribute the improvements to a single module with high confidence, nor can we rule out interactions between modules.
+
+\subsection{What future work can meaningfully achieve}
+
+The most impactful next step is a targeted ablation study that separates (i) attention placement effects (ASPP concatenation vs.\ post-projection vs.\ decoder fusion), and (ii) module contributions (Strip Pooling vs.\ EPSA vs.\ ECA). A minimal but informative set includes: baseline; +Shuffle Attention only; +decoder-fusion ECA only; SA-ECA; +Strip Pooling only; +EPSA only (post-projection); +low-level ECA only; and full SP-EPSA. In addition, a fair backbone comparison would benefit from controlling effective batch size (e.g., via gradient accumulation) and verifying whether MobileNetV3-Large underperformance persists under matched optimization settings.
+
+Finally, exploring why MobileNetV3-Large interacts poorly with added attention is a promising direction. Since MobileNetV3-Large already contains squeeze-and-excitation blocks, it may be more effective to (a) reduce the strength of external attention (e.g., via learnable residual scaling), or (b) relocate attention to avoid redundant channel reweighting.
+
+\subsection{Implementation-driven insights}
+
+Two practical insights emerge from this study. First, the same attention mechanism can behave differently across datasets: modules that emphasize long-range, directional context (Strip Pooling) align well with the structured geometry of Cityscapes but may be less helpful for the diverse, object-centric layouts in VOC. Second, attention placement matters: applying attention on the concatenated ASPP tensor (1280 channels) is a different inductive bias than applying attention after projection (256 channels), and these choices can trade off capacity, stability, and interpretability.
+
+\section{Threats to Validity}
+
+extbf{Validation-only evaluation.} All reported metrics are computed on the public validation splits of PASCAL VOC 2012 and Cityscapes. For Cityscapes in particular, the official test set is evaluated via a privately hosted server, which introduces friction in obtaining test metrics. As a result, our conclusions strictly reflect validation performance and may not fully generalize to the hidden evaluation sets.
+
+extbf{Confounding from non-identical training recipes.} Some comparisons are not perfectly controlled due to practical constraints. In particular, MobileNetV3-Large experiments may use smaller batch sizes than MobileNetV2, and certain runs differ in validation settings (e.g., whether center-crop validation is enabled). These differences can affect BatchNorm statistics and optimization dynamics, potentially confounding backbone-to-backbone comparisons.
+
+extbf{Bundled architectural changes in SP-EPSA.} The SP-EPSA variant combines Strip Pooling, EPSA (post-projection), and low-level ECA. This bundling increases the risk that the observed gain on Cityscapes is driven by a subset of components or their interactions, rather than any single module. This limits causal interpretability until component-level ablations are conducted.
+
+\section{Conclusion}
+
+This paper has investigated the integration of lightweight attention mechanisms into the DeepLabV3+ architecture for semantic segmentation. We proposed two attention augmentation strategies: SA-ECA, which combines Shuffle Attention in the ASPP module with Efficient Channel Attention in the decoder, and SP-EPSA, which replaces global average pooling with Strip Pooling and adds Efficient Pyramid Split Attention for multi-scale refinement.
+
+Experimental evaluation on PASCAL VOC 2012 and Cityscapes reveals that attention mechanism effectiveness is highly dataset-dependent. On VOC, the SA-ECA variant achieves a +1.31\% mIoU improvement with negligible computational overhead. On Cityscapes, the SP-EPSA variant delivers a more substantial +2.55\% mIoU gain (74.62\% vs.\ 72.07\%), demonstrating the benefits of directional context aggregation for structured urban scenes. Notably, these improvements are achieved with minimal parameter increase (13\% for SP-EPSA) and computational overhead (3.6\% additional GFLOPs).
+
+Our results also highlight an important finding regarding backbone selection: MobileNetV3-Large, despite its more sophisticated design, consistently underperforms MobileNetV2 when augmented with additional attention modules. This suggests that careful consideration of attention module interactions is necessary when extending architectures that already incorporate attention-like mechanisms.
+
+Future work will explore alternative attention integration strategies, extended hyperparameter optimization, and evaluation on additional benchmark datasets. Investigation of the attention interference phenomenon in MobileNetV3 may yield insights applicable to the design of attention-augmented architectures more broadly.
+
+\begin{thebibliography}{00}
+    \bibitem{deeplabv3} L.-C. Chen, G. Papandreou, F. Schroff, and H. Adam, ``Rethinking atrous convolution for semantic image segmentation,'' arXiv:1706.05587, 2017.
+    \bibitem{chen2018encoder} L.-C. Chen, Y. Zhu, G. Papandreou, F. Schroff, and H. Adam, ``Encoder-decoder with atrous separable convolution for semantic image segmentation,'' in \textit{Proc. Eur. Conf. Comput. Vis. (ECCV)}, 2018, pp. 801--818.
+    \bibitem{mobilenetv3} A. Howard, M. Sandler, G. Chu, L.-C. Chen, B. Chen, M. Tan, W. Wang, Y. Zhu, R. Pang, V. Vasudevan, Q. V. Le, and H. Adam, ``Searching for MobileNetV3,'' in \textit{Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV)}, 2019, pp. 1314--1324.
+    \bibitem{sandler2018mobilenetv2} M. Sandler, A. Howard, M. Zhu, A. Zhmoginov, and L.-C. Chen, ``MobileNetV2: Inverted residuals and linear bottlenecks,'' in \textit{Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2018, pp. 4510--4520.
+    \bibitem{cityscapes} M. Cordts, M. Omran, S. Ramos, T. Rehfeld, M. Enzweiler, R. Benenson, U. Franke, S. Roth, and B. Schiele, ``The Cityscapes dataset for semantic urban scene understanding,'' in \textit{Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2016, pp. 3213--3223.
+    \bibitem{pascalvoc} M. Everingham, L. Van Gool, C. K. I. Williams, J. Winn, and A. Zisserman, ``The PASCAL Visual Object Classes (VOC) challenge,'' \textit{Int. J. Comput. Vis.}, vol. 88, no. 2, pp. 303--338, 2010.
+    \bibitem{fcn} J. Long, E. Shelhamer, and T. Darrell, ``Fully convolutional networks for semantic segmentation,'' in \textit{Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2015, pp. 3431--3440.
+    \bibitem{unet} O. Ronneberger, P. Fischer, and T. Brox, ``U-Net: Convolutional networks for biomedical image segmentation,'' in \textit{Proc. Int. Conf. Med. Image Comput. Comput.-Assist. Interv. (MICCAI)}, 2015, pp. 234--241.
+    \bibitem{pspnet} H. Zhao, J. Shi, X. Qi, X. Wang, and J. Jia, ``Pyramid scene parsing network,'' in \textit{Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2017, pp. 2881--2890.
+    \bibitem{resnet} K. He, X. Zhang, S. Ren, and J. Sun, ``Deep residual learning for image recognition,'' in \textit{Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2016, pp. 770--778.
+    \bibitem{enet} A. Paszke, A. Chaurasia, S. Kim, and E. Culurciello, ``ENet: A deep neural network architecture for real-time semantic segmentation,'' arXiv:1606.02147, 2016.
+    \bibitem{bisenet} C. Yu, J. Wang, C. Peng, C. Gao, G. Yu, and N. Sang, ``BiSeNet: Bilateral segmentation network for real-time semantic segmentation,'' in \textit{Proc. Eur. Conf. Comput. Vis. (ECCV)}, 2018, pp. 334--349.
+    \bibitem{fastscnn} R. P. K. Poudel, S. Liwicki, and R. Cipolla, ``Fast-SCNN: Fast semantic segmentation network,'' arXiv:1902.04502, 2019.
+    \bibitem{zhang2021sa} Q.-L. Zhang and Y.-B. Yang, ``SA-Net: Shuffle attention for deep convolutional neural networks,'' in \textit{Proc. IEEE Int. Conf. Acoust., Speech Signal Process. (ICASSP)}, 2021, pp. 2235--2239.
+    \bibitem{senet} J. Hu, L. Shen, and G. Sun, ``Squeeze-and-excitation networks,'' in \textit{Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2018, pp. 7132--7141.
+    \bibitem{cbam} S. Woo, J. Park, J.-Y. Lee, and I. S. Kweon, ``CBAM: Convolutional block attention module,'' in \textit{Proc. Eur. Conf. Comput. Vis. (ECCV)}, 2018, pp. 3--19.
+    \bibitem{wang2020eca} Q. Wang, B. Wu, P. Zhu, P. Li, W. Zuo, and Q. Hu, ``ECA-Net: Efficient channel attention for deep convolutional neural networks,'' in \textit{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2020.
+    \bibitem{hu2021epsa} H. Zhang, K. Zu, J. Lu, Y. Zou, and D. Meng, ``EPSANet: An efficient pyramid split attention block on convolutional neural network,'' arXiv:2105.14447, 2021.
+    \bibitem{hou2020strip} Q. Hou, L. Zhang, M.-M. Cheng, and J. Feng, ``Strip pooling: Rethinking spatial pooling for scene parsing,'' in \textit{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2020, pp. 4003--4012.
+    \bibitem{hou2024lmdeeplab} X. Hou, P. Chen, and H. Gu, ``LM-DeeplabV3+: A lightweight image segmentation algorithm based on multi-scale feature interaction,'' \textit{Applied Sciences}, vol. 14, no. 4, Art. no. 1558, 2024, doi: 10.3390/app14041558.
+    \bibitem{yang2025lae} J. Yang, ``LAE-DeepLabV3+: A lightweight network for road scene segmentation,'' \textit{Applied and Computational Engineering}, vol. 203, pp. 213--226, 2025, doi: 10.54254/2755-2721/2026.TJ29562.
+    \bibitem{vainf_deeplabv3plus_pytorch} G. Fang (VainF), ``DeepLabV3Plus-Pytorch,'' GitHub repository. [Online]. Available: \url{https://github.com/VainF/DeepLabV3Plus-  Pytorch}. Accessed: 2026-01-03.
+\end{thebibliography}
+
+\end{document}

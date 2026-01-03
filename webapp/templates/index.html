@@ -1,0 +1,2039 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cityscapes Segmentation Viewer</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #00d9ff;
+            font-size: 2rem;
+        }
+
+        .controls {
+            background: #16213e;
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .control-group label {
+            font-weight: 600;
+            color: #00d9ff;
+            font-size: 0.9rem;
+        }
+
+        select, input[type="file"] {
+            padding: 12px;
+            border: 2px solid #0f3460;
+            border-radius: 8px;
+            background: #1a1a2e;
+            color: #eee;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+        select:hover, input[type="file"]:hover {
+            border-color: #00d9ff;
+        }
+
+        .btn {
+            padding: 14px 28px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #00d9ff, #0f3460);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 217, 255, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6c5ce7, #a55eea);
+            color: white;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(165, 94, 234, 0.4);
+        }
+
+        .btn-secondary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .results {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+        }
+
+        .result-card {
+            background: #16213e;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .result-card h3 {
+            padding: 15px 20px;
+            background: #0f3460;
+            color: #00d9ff;
+            font-size: 1rem;
+        }
+
+        .result-card .image-container {
+            padding: 15px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 200px;
+            background: #1a1a2e;
+        }
+
+        .result-card img {
+            max-width: 100%;
+            max-height: 400px;
+            border-radius: 8px;
+        }
+
+        .placeholder {
+            color: #666;
+            font-style: italic;
+        }
+
+        .metrics-card {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .metrics-card h3 {
+            color: #00d9ff;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #0f3460;
+        }
+
+        .metrics-summary {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .metric-box {
+            background: #1a1a2e;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .metric-box .value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #00d9ff;
+        }
+
+        .metric-box .label {
+            font-size: 0.85rem;
+            color: #888;
+            margin-top: 5px;
+        }
+
+        .class-metrics {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .class-metrics table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .class-metrics th, .class-metrics td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid #0f3460;
+        }
+
+        .class-metrics th {
+            background: #0f3460;
+            position: sticky;
+            top: 0;
+            font-size: 0.85rem;
+        }
+
+        .class-metrics td {
+            font-size: 0.9rem;
+        }
+
+        .class-metrics tr:hover {
+            background: #1a1a2e;
+        }
+
+        .color-box {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        .legend {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .legend h3 {
+            color: #00d9ff;
+            margin-bottom: 15px;
+        }
+
+        .legend-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            font-size: 0.85rem;
+        }
+
+        .info-panel {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .info-panel h3 {
+            color: #00d9ff;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #0f3460;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .info-item {
+            background: #1a1a2e;
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .info-item .label {
+            font-size: 0.75rem;
+            color: #888;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .info-item .value {
+            font-size: 1rem;
+            color: #fff;
+            word-break: break-all;
+        }
+
+        .info-item .value.highlight {
+            color: #00d9ff;
+            font-weight: 600;
+        }
+
+        .class-distribution {
+            margin-top: 15px;
+        }
+
+        .dist-bar-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            gap: 10px;
+            position: relative;
+        }
+
+        .dist-bar-label {
+            min-width: 120px;
+            font-size: 0.85rem;
+        }
+
+        .dist-bar-wrapper {
+            flex: 1;
+            height: 24px;
+            background: #1a1a2e;
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .dist-bar-dual {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .dist-bar {
+            height: 50%;
+            transition: width 0.3s ease;
+            position: relative;
+        }
+
+        .dist-bar.pred-bar {
+            border-radius: 4px 4px 0 0;
+        }
+
+        .dist-bar.gt-bar {
+            border-radius: 0 0 4px 4px;
+            opacity: 0.6;
+        }
+
+        .dist-bar-single {
+            height: 100%;
+            border-radius: 4px;
+        }
+
+        .dist-bar-value {
+            min-width: 80px;
+            text-align: right;
+            font-size: 0.8rem;
+            color: #888;
+            display: flex;
+            flex-direction: column;
+            line-height: 1.2;
+        }
+
+        .dist-bar-value .pred-val {
+            color: #00d9ff;
+        }
+
+        .dist-bar-value .gt-val {
+            color: #ffd93d;
+        }
+
+        /* Tooltip */
+        .dist-tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            z-index: 100;
+            pointer-events: none;
+            white-space: nowrap;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            transform: translateX(-50%);
+            bottom: 100%;
+            left: 50%;
+            margin-bottom: 8px;
+            display: none;
+        }
+
+        .dist-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 6px solid transparent;
+            border-top-color: rgba(0, 0, 0, 0.9);
+        }
+
+        .dist-bar-wrapper:hover .dist-tooltip {
+            display: block;
+        }
+
+        .tooltip-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 15px;
+            margin: 3px 0;
+        }
+
+        .tooltip-label {
+            color: #888;
+        }
+
+        .tooltip-pred {
+            color: #00d9ff;
+        }
+
+        .tooltip-gt {
+            color: #ffd93d;
+        }
+
+        /* Expand/Collapse */
+        .dist-expand-btn {
+            background: #0f3460;
+            border: none;
+            color: #00d9ff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            margin-top: 10px;
+            transition: background 0.3s;
+        }
+
+        .dist-expand-btn:hover {
+            background: #16213e;
+        }
+
+        .dist-hidden-section {
+            display: none;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed #0f3460;
+        }
+
+        .dist-hidden-section.expanded {
+            display: block;
+        }
+
+        .dist-legend {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+            font-size: 0.85rem;
+        }
+
+        .dist-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .dist-legend-box {
+            width: 16px;
+            height: 10px;
+            border-radius: 2px;
+        }
+
+        .dist-legend-box.pred {
+            background: #00d9ff;
+        }
+
+        .dist-legend-box.gt {
+            background: #ffd93d;
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .slider-container input[type="range"] {
+            flex: 1;
+            height: 6px;
+            -webkit-appearance: none;
+            background: #0f3460;
+            border-radius: 3px;
+            outline: none;
+        }
+
+        .slider-container input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #00d9ff;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .slider-value {
+            min-width: 40px;
+            text-align: center;
+            color: #00d9ff;
+        }
+
+        .system-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-right: 5px;
+        }
+
+        .badge-gpu {
+            background: #00b894;
+            color: white;
+        }
+
+        .badge-cpu {
+            background: #fdcb6e;
+            color: #1a1a2e;
+        }
+
+        /* Image Modal/Lightbox */
+        .image-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        .image-modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            position: relative;
+            max-width: 95%;
+            max-height: 85%;
+            overflow: auto;
+        }
+
+        .modal-content img {
+            max-width: none;
+            transform-origin: center center;
+            transition: transform 0.1s ease;
+            cursor: grab;
+        }
+
+        .modal-content img:active {
+            cursor: grabbing;
+        }
+
+        .modal-controls {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+            align-items: center;
+        }
+
+        .modal-btn {
+            padding: 10px 20px;
+            background: #0f3460;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: background 0.3s;
+        }
+
+        .modal-btn:hover {
+            background: #00d9ff;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            font-size: 2rem;
+            color: white;
+            cursor: pointer;
+            z-index: 1001;
+        }
+
+        .modal-close:hover {
+            color: #00d9ff;
+        }
+
+        .modal-title {
+            color: #00d9ff;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+        }
+
+        .zoom-level {
+            color: white;
+            font-size: 1rem;
+            min-width: 60px;
+            text-align: center;
+        }
+
+        .result-card .image-container img {
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .result-card .image-container img:hover {
+            transform: scale(1.02);
+            box-shadow: 0 5px 20px rgba(0, 217, 255, 0.3);
+        }
+
+        /* Results grid layout */
+        .results-row {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .results-row.single {
+            grid-template-columns: 1fr;
+        }
+
+        .results-row .result-card {
+            margin: 0;
+        }
+
+        /* Comparison view */
+        .comparison-container {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .comparison-container.active {
+            display: block;
+        }
+
+        .comparison-container h3 {
+            color: #00d9ff;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .comparison-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .comparison-modes {
+            display: flex;
+            gap: 10px;
+        }
+
+        .comparison-mode-btn {
+            padding: 8px 16px;
+            background: #1a1a2e;
+            border: 2px solid #0f3460;
+            border-radius: 6px;
+            color: #888;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.3s;
+        }
+
+        .comparison-mode-btn:hover {
+            border-color: #00d9ff;
+            color: #00d9ff;
+        }
+
+        .comparison-mode-btn.active {
+            background: #0f3460;
+            border-color: #00d9ff;
+            color: #00d9ff;
+        }
+
+        .comparison-viewer {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 300px;
+            background: #1a1a2e;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        /* Side by side comparison */
+        .comparison-side-by-side {
+            display: flex;
+            gap: 20px;
+            width: 100%;
+            justify-content: center;
+        }
+
+        .comparison-side-by-side .comp-image {
+            flex: 1;
+            max-width: 48%;
+            text-align: center;
+        }
+
+        .comparison-side-by-side .comp-image img {
+            max-width: 100%;
+            max-height: 400px;
+            border-radius: 8px;
+        }
+
+        .comparison-side-by-side .comp-label {
+            margin-top: 10px;
+            color: #888;
+            font-size: 0.9rem;
+        }
+
+        /* Slider comparison */
+        .comparison-slider {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            overflow: hidden;
+        }
+
+        .comparison-slider img {
+            display: block;
+            width: 100%;
+            max-height: 500px;
+            object-fit: contain;
+        }
+
+        .comparison-slider .slider-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            overflow: hidden;
+            border-right: 3px solid #00d9ff;
+        }
+
+        .comparison-slider .slider-overlay img {
+            height: 100%;
+            width: auto;
+            max-width: none;
+        }
+
+        .comparison-slider .slider-handle {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 40px;
+            margin-left: -20px;
+            cursor: ew-resize;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .comparison-slider .slider-handle::after {
+            content: '⟷';
+            background: #00d9ff;
+            color: #1a1a2e;
+            padding: 10px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
+        .comparison-slider .slider-labels {
+            position: absolute;
+            bottom: 10px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 20px;
+            pointer-events: none;
+        }
+
+        .comparison-slider .slider-label {
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px 12px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+
+        /* Diff/Overlay comparison */
+        .comparison-diff {
+            position: relative;
+            text-align: center;
+        }
+
+        .comparison-diff img {
+            max-width: 100%;
+            max-height: 500px;
+            border-radius: 8px;
+        }
+
+        .comparison-diff-legend {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 15px;
+            font-size: 0.85rem;
+        }
+
+        .comparison-diff-legend span {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .diff-color-box {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #0f3460;
+            border-top: 4px solid #00d9ff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #ff4757;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .preview-container {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .preview-container img {
+            max-width: 150px;
+            max-height: 100px;
+            border-radius: 8px;
+            border: 2px solid #0f3460;
+        }
+
+        .file-info {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Semantic Segmentation Viewer</h1>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="dataset">Dataset</label>
+                <select id="dataset">
+                    <option value="cityscapes">🚗 Cityscapes (19 classes)</option>
+                    <option value="voc">🖼️ Pascal VOC (21 classes)</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="checkpoint">Model Checkpoint</label>
+                <select id="checkpoint">
+                    <option value="">-- Select a model --</option>
+                    {% for cp in checkpoints %}
+                    <option value="{{ cp.name }}" data-dataset="{{ cp.dataset }}" data-experiment="{{ cp.experiment }}">{{ cp.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="image">Input Image</label>
+                <input type="file" id="image" accept="image/*">
+                <div id="image-preview" class="preview-container"></div>
+            </div>
+            
+            <div class="control-group">
+                <label for="groundtruth">Ground Truth (Optional)</label>
+                <input type="file" id="groundtruth" accept="image/*">
+                <div class="file-info">Upload Cityscapes labelIds image for metrics</div>
+                <div id="gt-preview" class="preview-container"></div>
+            </div>
+            
+            <div class="control-group">
+                <label for="overlay-alpha">Overlay Opacity</label>
+                <div class="slider-container">
+                    <input type="range" id="overlay-alpha" min="0" max="100" value="50">
+                    <span class="slider-value" id="alpha-value">50%</span>
+                </div>
+            </div>
+            
+            <div class="control-group" style="justify-content: flex-end;">
+                <div class="btn-group">
+                    <button id="predict-btn" class="btn btn-primary" disabled>
+                        🔍 Run Prediction
+                    </button>
+                    <button id="export-btn" class="btn btn-secondary" disabled>
+                        📥 Export Grid
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="error" class="error"></div>
+        
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Running inference...</p>
+        </div>
+        
+        <div id="results" style="display: none;">
+            <!-- Row 1: Original and Overlay -->
+            <div class="results-row">
+                <div class="result-card">
+                    <h3>📷 Original Image</h3>
+                    <div class="image-container">
+                        <img id="result-original" src="" alt="Original" onclick="openModal(this, 'Original Image')" title="Click to zoom">
+                    </div>
+                </div>
+                
+                <div class="result-card">
+                    <h3>🔀 Overlay</h3>
+                    <div class="image-container">
+                        <img id="result-overlay" src="" alt="Overlay" onclick="openModal(this, 'Overlay')" title="Click to zoom">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Row 2: Mask and Ground Truth (side by side) -->
+            <div class="results-row" id="mask-gt-row">
+                <div class="result-card">
+                    <h3>🎨 Segmentation Mask (Prediction)</h3>
+                    <div class="image-container">
+                        <img id="result-mask" src="" alt="Mask" onclick="openModal(this, 'Segmentation Mask')" title="Click to zoom">
+                    </div>
+                </div>
+                
+                <div class="result-card" id="gt-card" style="display: none;">
+                    <h3>✅ Ground Truth</h3>
+                    <div class="image-container">
+                        <img id="result-gt" src="" alt="Ground Truth" onclick="openModal(this, 'Ground Truth')" title="Click to zoom">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Comparison Section -->
+            <div class="comparison-container" id="comparison-container">
+                <div class="comparison-header">
+                    <h3>🔍 Compare Prediction vs Ground Truth</h3>
+                    <div class="comparison-modes">
+                        <button class="comparison-mode-btn active" data-mode="side-by-side" onclick="setComparisonMode('side-by-side')">Side by Side</button>
+                        <button class="comparison-mode-btn" data-mode="slider" onclick="setComparisonMode('slider')">Slider</button>
+                        <button class="comparison-mode-btn" data-mode="diff" onclick="setComparisonMode('diff')">Difference</button>
+                    </div>
+                </div>
+                <div class="comparison-viewer" id="comparison-viewer">
+                    <!-- Comparison content will be inserted here -->
+                </div>
+            </div>
+        </div>
+        
+        <div id="metrics-container" class="metrics-card" style="display: none;">
+            <h3>📊 Evaluation Metrics</h3>
+            <div class="metrics-summary">
+                <div class="metric-box">
+                    <div class="value" id="metric-acc">-</div>
+                    <div class="label">Pixel Accuracy</div>
+                </div>
+                <div class="metric-box">
+                    <div class="value" id="metric-iou">-</div>
+                    <div class="label">Mean IoU</div>
+                </div>
+                <div class="metric-box">
+                    <div class="value" id="metric-dice">-</div>
+                    <div class="label">Mean Dice</div>
+                </div>
+            </div>
+            <div class="class-metrics">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Class</th>
+                            <th>IoU</th>
+                            <th>Dice</th>
+                            <th>Accuracy</th>
+                            <th>GT Pixels</th>
+                        </tr>
+                    </thead>
+                    <tbody id="class-metrics-body">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Info Panels -->
+        <div id="info-panels" style="display: none;">
+            <div class="info-panel">
+                <h3>🖼️ Image Information</h3>
+                <div class="info-grid" id="image-info-grid">
+                </div>
+            </div>
+            
+            <div class="info-panel">
+                <h3>⚡ Performance</h3>
+                <div class="info-grid" id="timing-info-grid">
+                </div>
+            </div>
+            
+            <div class="info-panel">
+                <h3>📈 Class Distribution (Prediction)</h3>
+                <div class="class-distribution" id="class-distribution">
+                </div>
+            </div>
+            
+            <div class="info-panel" id="config-panel" style="display: none;">
+                <h3>⚙️ Model Configuration</h3>
+                <div class="info-grid" id="config-grid">
+                </div>
+            </div>
+            
+            <div class="info-panel">
+                <h3>💻 System Information</h3>
+                <div class="info-grid" id="system-info-grid">
+                </div>
+            </div>
+        </div>
+        
+        <div class="legend">
+            <h3>🏷️ Class Legend</h3>
+            <div class="legend-grid" id="legend-grid">
+                {% for i in range(class_names|length) %}
+                {% if class_names[i] %}
+                <div class="legend-item">
+                    <span class="color-box" style="background: rgb{{ class_colors[i] }};"></span>
+                    {{ class_names[i] }}
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Image Modal/Lightbox -->
+    <div id="image-modal" class="image-modal">
+        <span class="modal-close" onclick="closeModal()">&times;</span>
+        <div class="modal-title" id="modal-title">Image</div>
+        <div class="modal-content" id="modal-content">
+            <img id="modal-image" src="" alt="Zoomed Image">
+        </div>
+        <div class="modal-controls">
+            <button class="modal-btn" onclick="zoomOut()">➖</button>
+            <span class="zoom-level" id="zoom-level">100%</span>
+            <button class="modal-btn" onclick="zoomIn()">➕</button>
+            <button class="modal-btn" onclick="resetZoom()">↺ Reset</button>
+            <button class="modal-btn" onclick="fitToScreen()">⊡ Fit</button>
+        </div>
+    </div>
+    
+    <script>
+        const datasetSelect = document.getElementById('dataset');
+        const checkpointSelect = document.getElementById('checkpoint');
+        const imageInput = document.getElementById('image');
+        const gtInput = document.getElementById('groundtruth');
+        const predictBtn = document.getElementById('predict-btn');
+        const exportBtn = document.getElementById('export-btn');
+        const loadingDiv = document.getElementById('loading');
+        const resultsDiv = document.getElementById('results');
+        const errorDiv = document.getElementById('error');
+        const metricsContainer = document.getElementById('metrics-container');
+        const infoPanels = document.getElementById('info-panels');
+        const overlayAlphaSlider = document.getElementById('overlay-alpha');
+        const alphaValueSpan = document.getElementById('alpha-value');
+        
+        let selectedImage = null;
+        let hasPrediction = false;
+        let overlayUpdateTimeout = null;
+        let hasGroundTruth = false;
+        let currentComparisonMode = 'side-by-side';
+        let allCheckpoints = [];
+        
+        // Store image data for comparison
+        let imageData = {
+            mask: null,
+            gt: null,
+            diff: null
+        };
+        
+        // Modal/Zoom variables
+        let currentZoom = 1;
+        const zoomStep = 0.25;
+        const minZoom = 0.25;
+        const maxZoom = 5;
+        
+        // Store all checkpoint options on page load
+        window.addEventListener('DOMContentLoaded', function() {
+            const options = checkpointSelect.querySelectorAll('option');
+            options.forEach(option => {
+                if (option.value) {
+                    allCheckpoints.push({
+                        value: option.value,
+                        text: option.textContent,
+                        dataset: option.getAttribute('data-dataset'),
+                        experiment: option.getAttribute('data-experiment')
+                    });
+                }
+            });
+            
+            // Apply initial filter
+            filterCheckpoints();
+        });
+        
+        // Filter checkpoints by dataset
+        function filterCheckpoints() {
+            const selectedDataset = datasetSelect.value;
+            const currentValue = checkpointSelect.value;
+            
+            // Clear current options except first
+            checkpointSelect.innerHTML = '<option value="">-- Select a model --</option>';
+            
+            // Add filtered options
+            let foundCurrent = false;
+            allCheckpoints.forEach(cp => {
+                if (cp.dataset === selectedDataset) {
+                    const option = document.createElement('option');
+                    option.value = cp.value;
+                    option.textContent = cp.text;
+                    option.setAttribute('data-dataset', cp.dataset);
+                    option.setAttribute('data-experiment', cp.experiment);
+                    checkpointSelect.appendChild(option);
+                    
+                    if (cp.value === currentValue) {
+                        option.selected = true;
+                        foundCurrent = true;
+                    }
+                }
+            });
+            
+            // Reset if current selection is not in filtered list
+            if (!foundCurrent) {
+                checkpointSelect.value = '';
+                document.getElementById('config-panel').style.display = 'none';
+            }
+            
+            updateButtonState();
+        }
+        
+        // Load and display checkpoint config
+        async function loadCheckpointConfig(checkpointName) {
+            if (!checkpointName) {
+                document.getElementById('config-panel').style.display = 'none';
+                return;
+            }
+            
+            try {
+                const response = await fetch('/checkpoint_config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ checkpoint: checkpointName })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.config) {
+                    displayConfig(data.config, data.checkpoint);
+                    document.getElementById('config-panel').style.display = 'block';
+                } else if (response.ok) {
+                    // No config file available
+                    document.getElementById('config-panel').style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Failed to load config:', error);
+            }
+        }
+        
+        // Display config in UI
+        function displayConfig(config, checkpointInfo) {
+            const configGrid = document.getElementById('config-grid');
+            configGrid.innerHTML = '';
+            
+            // Add checkpoint info
+            addConfigItem(configGrid, 'Experiment', checkpointInfo.experiment);
+            addConfigItem(configGrid, 'Dataset', checkpointInfo.dataset.toUpperCase());
+            
+            if (!config) return;
+            
+            // Add key config values
+            const keyFields = [
+                'model', 'output_stride', 'num_classes',
+                'total_itrs', 'batch_size', 'crop_size',
+                'lr', 'lr_policy', 'loss_type',
+                'weight_decay', 'momentum'
+            ];
+            
+            keyFields.forEach(field => {
+                if (config[field] !== undefined) {
+                    const label = field.split('_').map(w => 
+                        w.charAt(0).toUpperCase() + w.slice(1)
+                    ).join(' ');
+                    addConfigItem(configGrid, label, config[field]);
+                }
+            });
+        }
+        
+        function addConfigItem(container, label, value) {
+            const item = document.createElement('div');
+            item.className = 'info-item';
+            item.innerHTML = `
+                <div class="label">${label}</div>
+                <div class="value highlight">${value}</div>
+            `;
+            container.appendChild(item);
+        }
+        
+        // Dataset change handler
+        datasetSelect.addEventListener('change', function() {
+            filterCheckpoints();
+        });
+        
+        // Overlay alpha slider - real-time update
+        overlayAlphaSlider.addEventListener('input', function() {
+            alphaValueSpan.textContent = this.value + '%';
+            
+            // Debounce the overlay update
+            if (hasPrediction) {
+                clearTimeout(overlayUpdateTimeout);
+                overlayUpdateTimeout = setTimeout(() => {
+                    updateOverlayRealtime(this.value / 100);
+                }, 100);
+            }
+        });
+        
+        // Real-time overlay update function
+        async function updateOverlayRealtime(alpha) {
+            try {
+                const response = await fetch('/update_overlay', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ alpha: alpha })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.overlay) {
+                    document.getElementById('result-overlay').src = 'data:image/png;base64,' + data.overlay;
+                }
+            } catch (error) {
+                console.error('Failed to update overlay:', error);
+            }
+        }
+        
+        // Modal/Lightbox functions
+        function openModal(imgElement, title) {
+            const modal = document.getElementById('image-modal');
+            const modalImg = document.getElementById('modal-image');
+            const modalTitle = document.getElementById('modal-title');
+            
+            modalImg.src = imgElement.src;
+            modalTitle.textContent = title || 'Image';
+            modal.classList.add('active');
+            
+            resetZoom();
+            
+            // Prevent body scroll
+            document.body.style.overflow = 'hidden';
+        }
+        
+        function closeModal() {
+            const modal = document.getElementById('image-modal');
+            modal.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+        
+        function updateZoom() {
+            const modalImg = document.getElementById('modal-image');
+            const zoomLevel = document.getElementById('zoom-level');
+            
+            modalImg.style.transform = `scale(${currentZoom})`;
+            zoomLevel.textContent = Math.round(currentZoom * 100) + '%';
+        }
+        
+        function zoomIn() {
+            if (currentZoom < maxZoom) {
+                currentZoom = Math.min(currentZoom + zoomStep, maxZoom);
+                updateZoom();
+            }
+        }
+        
+        function zoomOut() {
+            if (currentZoom > minZoom) {
+                currentZoom = Math.max(currentZoom - zoomStep, minZoom);
+                updateZoom();
+            }
+        }
+        
+        function resetZoom() {
+            currentZoom = 1;
+            updateZoom();
+        }
+        
+        function fitToScreen() {
+            currentZoom = 0.9;
+            updateZoom();
+        }
+        
+        // Close modal on escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeModal();
+            } else if (e.key === '+' || e.key === '=') {
+                zoomIn();
+            } else if (e.key === '-') {
+                zoomOut();
+            }
+        });
+        
+        // Close modal when clicking outside the image
+        document.getElementById('image-modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+        
+        // Mouse wheel zoom in modal
+        document.getElementById('modal-content').addEventListener('wheel', function(e) {
+            e.preventDefault();
+            if (e.deltaY < 0) {
+                zoomIn();
+            } else {
+                zoomOut();
+            }
+        });
+        
+        // Comparison functions
+        function setComparisonMode(mode) {
+            currentComparisonMode = mode;
+            
+            // Update button states
+            document.querySelectorAll('.comparison-mode-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.mode === mode);
+            });
+            
+            // Render comparison
+            renderComparison();
+        }
+        
+        function renderComparison() {
+            const viewer = document.getElementById('comparison-viewer');
+            
+            if (!imageData.mask || !imageData.gt) {
+                viewer.innerHTML = '<p style=\"color: #888;\">Upload ground truth to enable comparison</p>';
+                return;
+            }
+            
+            switch (currentComparisonMode) {
+                case 'side-by-side':
+                    renderSideBySide(viewer);
+                    break;
+                case 'slider':
+                    renderSlider(viewer);
+                    break;
+                case 'diff':
+                    renderDiff(viewer);
+                    break;
+            }
+        }
+        
+        function renderSideBySide(viewer) {
+            viewer.innerHTML = `
+                <div class="comparison-side-by-side">
+                    <div class="comp-image">
+                        <img src="${imageData.mask}" alt="Prediction" onclick="openModal(this, 'Prediction')">
+                        <div class="comp-label">Prediction</div>
+                    </div>
+                    <div class="comp-image">
+                        <img src="${imageData.gt}" alt="Ground Truth" onclick="openModal(this, 'Ground Truth')">
+                        <div class="comp-label">Ground Truth</div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function renderSlider(viewer) {
+            viewer.innerHTML = `
+                <div class="comparison-slider" id="comp-slider">
+                    <img src="${imageData.gt}" alt="Ground Truth" class="slider-base">
+                    <div class="slider-overlay" id="slider-overlay" style="width: 50%;">
+                        <img src="${imageData.mask}" alt="Prediction">
+                    </div>
+                    <div class="slider-handle" id="slider-handle" style="left: 50%;"></div>
+                    <div class="slider-labels">
+                        <span class="slider-label">Prediction</span>
+                        <span class="slider-label">Ground Truth</span>
+                    </div>
+                </div>
+            `;
+            
+            // Initialize slider interaction
+            initSlider();
+        }
+        
+        function initSlider() {
+            const slider = document.getElementById('comp-slider');
+            const overlay = document.getElementById('slider-overlay');
+            const handle = document.getElementById('slider-handle');
+            
+            if (!slider || !overlay || !handle) return;
+            
+            let isDragging = false;
+            
+            function updateSlider(x) {
+                const rect = slider.getBoundingClientRect();
+                let percentage = ((x - rect.left) / rect.width) * 100;
+                percentage = Math.max(0, Math.min(100, percentage));
+                
+                overlay.style.width = percentage + '%';
+                handle.style.left = percentage + '%';
+            }
+            
+            handle.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                e.preventDefault();
+            });
+            
+            slider.addEventListener('click', (e) => {
+                updateSlider(e.clientX);
+            });
+            
+            document.addEventListener('mousemove', (e) => {
+                if (isDragging) {
+                    updateSlider(e.clientX);
+                }
+            });
+            
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+            });
+            
+            // Touch support
+            handle.addEventListener('touchstart', (e) => {
+                isDragging = true;
+            });
+            
+            document.addEventListener('touchmove', (e) => {
+                if (isDragging && e.touches[0]) {
+                    updateSlider(e.touches[0].clientX);
+                }
+            });
+            
+            document.addEventListener('touchend', () => {
+                isDragging = false;
+            });
+        }
+        
+        function renderDiff(viewer) {
+            if (imageData.diff) {
+                viewer.innerHTML = `
+                    <div class="comparison-diff">
+                        <img src="${imageData.diff}" alt="Difference" onclick="openModal(this, 'Prediction vs GT Difference')">
+                        <div class="comparison-diff-legend">
+                            <span><span class="diff-color-box" style="background: #51cf66;"></span> Correct</span>
+                            <span><span class="diff-color-box" style="background: #ff6b6b;"></span> Incorrect</span>
+                            <span><span class="diff-color-box" style="background: #495057;"></span> Ignored</span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                viewer.innerHTML = '<p style="color: #888;">Generating difference map...</p>';
+                generateDiffImage();
+            }
+        }
+        
+        async function generateDiffImage() {
+            // Request diff image from server
+            try {
+                const formData = new FormData();
+                formData.append('checkpoint', checkpointSelect.value);
+                formData.append('image', selectedImage);
+                if (gtInput.files[0]) {
+                    formData.append('groundtruth', gtInput.files[0]);
+                }
+                
+                const response = await fetch('/generate_diff', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.diff) {
+                    imageData.diff = 'data:image/png;base64,' + data.diff;
+                    renderDiff(document.getElementById('comparison-viewer'));
+                }
+            } catch (error) {
+                console.error('Failed to generate diff:', error);
+            }
+        }
+        
+        // Update button state
+        function updateButtonState() {
+            predictBtn.disabled = !(checkpointSelect.value && selectedImage);
+        }
+        
+        function updateExportButtonState() {
+            exportBtn.disabled = !(checkpointSelect.value && selectedImage && hasPrediction);
+        }
+        
+        // Helper to create info item
+        function createInfoItem(label, value, highlight = false) {
+            return `
+                <div class="info-item">
+                    <div class="label">${label}</div>
+                    <div class="value ${highlight ? 'highlight' : ''}">${value}</div>
+                </div>
+            `;
+        }
+        
+        // Display image metadata
+        function displayImageInfo(metadata) {
+            const grid = document.getElementById('image-info-grid');
+            let html = '';
+            
+            const labels = {
+                filename: 'Filename',
+                width: 'Width',
+                height: 'Height',
+                aspect_ratio: 'Aspect Ratio',
+                megapixels: 'Resolution',
+                mode: 'Color Mode',
+                format: 'Format',
+                file_size: 'File Size',
+                exif_Make: 'Camera Make',
+                exif_Model: 'Camera Model',
+                exif_DateTime: 'Date Taken'
+            };
+            
+            for (const [key, label] of Object.entries(labels)) {
+                if (metadata[key] !== undefined) {
+                    const value = key === 'width' || key === 'height' ? metadata[key] + ' px' : metadata[key];
+                    html += createInfoItem(label, value, key === 'megapixels');
+                }
+            }
+            
+            grid.innerHTML = html;
+        }
+        
+        // Display timing info
+        function displayTimingInfo(timing) {
+            const grid = document.getElementById('timing-info-grid');
+            let html = '';
+            
+            html += createInfoItem('Preprocessing', timing.preprocess_ms + ' ms');
+            html += createInfoItem('Inference', timing.inference_ms + ' ms', true);
+            html += createInfoItem('Postprocessing', timing.postprocess_ms + ' ms');
+            html += createInfoItem('Total Request', timing.total_request_ms + ' ms');
+            html += createInfoItem('Throughput', timing.fps + ' FPS', true);
+            if (timing.model_load_ms !== 'cached') {
+                html += createInfoItem('Model Load', timing.model_load_ms + ' ms');
+            } else {
+                html += createInfoItem('Model Load', 'Cached ⚡');
+            }
+            
+            grid.innerHTML = html;
+        }
+        
+        // Display system info
+        function displaySystemInfo(info) {
+            const grid = document.getElementById('system-info-grid');
+            let html = '';
+            
+            const badge = info.cuda_available 
+                ? '<span class="system-badge badge-gpu">GPU</span>' 
+                : '<span class="system-badge badge-cpu">CPU</span>';
+            
+            html += createInfoItem('Device', badge + info.device_name, true);
+            html += createInfoItem('PyTorch', info.pytorch_version);
+            html += createInfoItem('TorchVision', info.torchvision_version);
+            if (info.cuda_version) {
+                html += createInfoItem('CUDA', info.cuda_version);
+            }
+            if (info.gpu_memory_total) {
+                html += createInfoItem('GPU Memory', info.gpu_memory_total);
+            }
+            html += createInfoItem('Classes', info.num_classes);
+            
+            grid.innerHTML = html;
+        }
+        
+        // Display class distribution with optional GT comparison
+        function displayClassDistribution(predDist, gtDist = null) {
+            const container = document.getElementById('class-distribution');
+            const visibleCount = 5; // Show top 5 by default
+            
+            // Merge pred and GT distributions
+            const merged = {};
+            
+            // Add prediction data
+            for (const cls of predDist) {
+                merged[cls.id] = {
+                    id: cls.id,
+                    name: cls.name,
+                    color: cls.color,
+                    pred_percentage: cls.percentage,
+                    pred_pixels: cls.pixels,
+                    gt_percentage: 0,
+                    gt_pixels: 0
+                };
+            }
+            
+            // Add GT data if available
+            if (gtDist) {
+                for (const cls of gtDist) {
+                    if (merged[cls.id]) {
+                        merged[cls.id].gt_percentage = cls.percentage;
+                        merged[cls.id].gt_pixels = cls.pixels;
+                    } else {
+                        merged[cls.id] = {
+                            id: cls.id,
+                            name: cls.name,
+                            color: cls.color,
+                            pred_percentage: 0,
+                            pred_pixels: 0,
+                            gt_percentage: cls.percentage,
+                            gt_pixels: cls.pixels
+                        };
+                    }
+                }
+            }
+            
+            // Sort by max of pred/gt percentage
+            const sortedClasses = Object.values(merged).sort((a, b) => 
+                Math.max(b.pred_percentage, b.gt_percentage) - Math.max(a.pred_percentage, a.gt_percentage)
+            );
+            
+            // Build HTML
+            let html = '';
+            
+            // Legend
+            if (gtDist) {
+                html += `
+                    <div class="dist-legend">
+                        <div class="dist-legend-item">
+                            <span class="dist-legend-box pred"></span>
+                            <span>Prediction</span>
+                        </div>
+                        <div class="dist-legend-item">
+                            <span class="dist-legend-box gt"></span>
+                            <span>Ground Truth</span>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Visible classes
+            html += '<div class="dist-visible-section">';
+            sortedClasses.slice(0, visibleCount).forEach(cls => {
+                html += createDistBarHTML(cls, gtDist !== null);
+            });
+            html += '</div>';
+            
+            // Hidden classes (expandable)
+            if (sortedClasses.length > visibleCount) {
+                const hiddenCount = sortedClasses.length - visibleCount;
+                html += `
+                    <button class="dist-expand-btn" onclick="toggleDistExpand(this)">
+                        ▼ Show ${hiddenCount} more classes
+                    </button>
+                    <div class="dist-hidden-section" id="dist-hidden">
+                `;
+                sortedClasses.slice(visibleCount).forEach(cls => {
+                    html += createDistBarHTML(cls, gtDist !== null);
+                });
+                html += '</div>';
+            }
+            
+            container.innerHTML = html;
+        }
+        
+        function createDistBarHTML(cls, hasGT) {
+            const color = `rgb(${cls.color[0]}, ${cls.color[1]}, ${cls.color[2]})`;
+            const maxPct = Math.max(cls.pred_percentage, cls.gt_percentage, 1);
+            const barScale = 100 / Math.max(maxPct * 1.2, 10); // Scale for better visibility
+            
+            const predWidth = cls.pred_percentage * barScale;
+            const gtWidth = cls.gt_percentage * barScale;
+            
+            // Tooltip content
+            let tooltipContent = `
+                <div class="tooltip-row">
+                    <span class="tooltip-label">Class:</span>
+                    <span>${cls.name}</span>
+                </div>
+                <div class="tooltip-row">
+                    <span class="tooltip-label">Prediction:</span>
+                    <span class="tooltip-pred">${cls.pred_percentage.toFixed(2)}% (${cls.pred_pixels.toLocaleString()} px)</span>
+                </div>
+            `;
+            
+            if (hasGT) {
+                tooltipContent += `
+                    <div class="tooltip-row">
+                        <span class="tooltip-label">Ground Truth:</span>
+                        <span class="tooltip-gt">${cls.gt_percentage.toFixed(2)}% (${cls.gt_pixels.toLocaleString()} px)</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span class="tooltip-label">Difference:</span>
+                        <span style="color: ${cls.pred_percentage > cls.gt_percentage ? '#ff6b6b' : '#51cf66'}">
+                            ${(cls.pred_percentage - cls.gt_percentage) > 0 ? '+' : ''}${(cls.pred_percentage - cls.gt_percentage).toFixed(2)}%
+                        </span>
+                    </div>
+                `;
+            }
+            
+            // Value display
+            let valueHTML = '';
+            if (hasGT) {
+                valueHTML = `
+                    <span class="pred-val">${cls.pred_percentage.toFixed(1)}%</span>
+                    <span class="gt-val">${cls.gt_percentage.toFixed(1)}%</span>
+                `;
+            } else {
+                valueHTML = `<span>${cls.pred_percentage.toFixed(1)}%</span>`;
+            }
+            
+            // Bar HTML
+            let barHTML = '';
+            if (hasGT) {
+                barHTML = `
+                    <div class="dist-bar-dual">
+                        <div class="dist-bar pred-bar" style="width: ${predWidth}%; background: ${color};"></div>
+                        <div class="dist-bar gt-bar" style="width: ${gtWidth}%; background: ${color}; filter: brightness(0.7) saturate(1.5);"></div>
+                    </div>
+                `;
+            } else {
+                barHTML = `<div class="dist-bar dist-bar-single" style="width: ${predWidth}%; background: ${color};"></div>`;
+            }
+            
+            return `
+                <div class="dist-bar-container">
+                    <div class="dist-bar-label">
+                        <span class="color-box" style="background: ${color}; width: 14px; height: 14px;"></span>
+                        ${cls.name}
+                    </div>
+                    <div class="dist-bar-wrapper">
+                        ${barHTML}
+                        <div class="dist-tooltip">${tooltipContent}</div>
+                    </div>
+                    <div class="dist-bar-value">${valueHTML}</div>
+                </div>
+            `;
+        }
+        
+        function toggleDistExpand(btn) {
+            const hiddenSection = document.getElementById('dist-hidden');
+            const isExpanded = hiddenSection.classList.contains('expanded');
+            
+            if (isExpanded) {
+                hiddenSection.classList.remove('expanded');
+                btn.innerHTML = `▼ Show ${hiddenSection.children.length} more classes`;
+            } else {
+                hiddenSection.classList.add('expanded');
+                btn.innerHTML = `▲ Hide extra classes`;
+            }
+        }
+        
+        // Preview image
+        function previewImage(input, previewId) {
+            const preview = document.getElementById(previewId);
+            preview.innerHTML = '';
+            
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = document.createElement('img');
+                    img.src = e.target.result;
+                    preview.appendChild(img);
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+        
+        checkpointSelect.addEventListener('change', function() {
+            updateButtonState();
+            hasPrediction = false;
+            updateExportButtonState();
+            loadCheckpointConfig(this.value);
+        });
+        
+        imageInput.addEventListener('change', function() {
+            selectedImage = this.files[0];
+            previewImage(this, 'image-preview');
+            updateButtonState();
+            hasPrediction = false;
+            updateExportButtonState();
+        });
+        
+        gtInput.addEventListener('change', function() {
+            previewImage(this, 'gt-preview');
+        });
+        
+        predictBtn.addEventListener('click', async function() {
+            if (!checkpointSelect.value || !selectedImage) return;
+            
+            // Show loading
+            loadingDiv.classList.add('active');
+            resultsDiv.style.display = 'none';
+            metricsContainer.style.display = 'none';
+            infoPanels.style.display = 'none';
+            errorDiv.style.display = 'none';
+            
+            // Prepare form data
+            const formData = new FormData();
+            formData.append('checkpoint', checkpointSelect.value);
+            formData.append('image', selectedImage);
+            formData.append('overlay_alpha', overlayAlphaSlider.value / 100);
+            
+            if (gtInput.files[0]) {
+                formData.append('groundtruth', gtInput.files[0]);
+            }
+            
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Prediction failed');
+                }
+                
+                // Show results
+                loadingDiv.classList.remove('active');
+                resultsDiv.style.display = 'block';
+                infoPanels.style.display = 'block';
+                
+                // Display original image
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('result-original').src = e.target.result;
+                };
+                reader.readAsDataURL(selectedImage);
+                
+                // Display mask and overlay
+                document.getElementById('result-mask').src = 'data:image/png;base64,' + data.mask;
+                document.getElementById('result-overlay').src = 'data:image/png;base64,' + data.overlay;
+                
+                // Store mask data for comparison
+                imageData.mask = 'data:image/png;base64,' + data.mask;
+                imageData.diff = null; // Reset diff
+                
+                // Handle ground truth and comparison
+                const gtCard = document.getElementById('gt-card');
+                const maskGtRow = document.getElementById('mask-gt-row');
+                const comparisonContainer = document.getElementById('comparison-container');
+                
+                if (data.groundtruth_colored) {
+                    hasGroundTruth = true;
+                    gtCard.style.display = 'block';
+                    document.getElementById('result-gt').src = 'data:image/png;base64,' + data.groundtruth_colored;
+                    
+                    // Store GT data for comparison
+                    imageData.gt = 'data:image/png;base64,' + data.groundtruth_colored;
+                    
+                    // Show comparison section
+                    comparisonContainer.classList.add('active');
+                    renderComparison();
+                    
+                    // Make sure both cards are visible side by side
+                    maskGtRow.classList.remove('single');
+                } else {
+                    hasGroundTruth = false;
+                    gtCard.style.display = 'none';
+                    imageData.gt = null;
+                    comparisonContainer.classList.remove('active');
+                    
+                    // Single column for mask when no GT
+                    maskGtRow.classList.add('single');
+                }
+                
+                // Display metrics if available
+                if (data.metrics) {
+                    metricsContainer.style.display = 'block';
+                    
+                    document.getElementById('metric-acc').textContent = 
+                        (data.metrics.overall_accuracy * 100).toFixed(2) + '%';
+                    document.getElementById('metric-iou').textContent = 
+                        (data.metrics.mean_iou * 100).toFixed(2) + '%';
+                    document.getElementById('metric-dice').textContent = 
+                        (data.metrics.mean_dice * 100).toFixed(2) + '%';
+                    
+                    // Class metrics table
+                    const tbody = document.getElementById('class-metrics-body');
+                    tbody.innerHTML = '';
+                    
+                    data.metrics.class_metrics.forEach(cls => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${cls.name}</td>
+                            <td>${(cls.iou * 100).toFixed(2)}%</td>
+                            <td>${(cls.dice * 100).toFixed(2)}%</td>
+                            <td>${cls.accuracy !== null ? (cls.accuracy * 100).toFixed(2) + '%' : '-'}</td>
+                            <td>${cls.gt_pixels.toLocaleString()}</td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                } else {
+                    metricsContainer.style.display = 'none';
+                }
+                
+                // Display info panels
+                if (data.image_metadata) {
+                    displayImageInfo(data.image_metadata);
+                }
+                if (data.timing) {
+                    displayTimingInfo(data.timing);
+                }
+                if (data.system_info) {
+                    displaySystemInfo(data.system_info);
+                }
+                if (data.class_distribution) {
+                    displayClassDistribution(data.class_distribution, data.gt_class_distribution || null);
+                }
+                if (data.config) {
+                    displayConfig(data.config, {
+                        experiment: data.experiment,
+                        dataset: data.dataset
+                    });
+                    document.getElementById('config-panel').style.display = 'block';
+                }
+                
+                // Enable export button after successful prediction
+                hasPrediction = true;
+                updateExportButtonState();
+                
+            } catch (error) {
+                loadingDiv.classList.remove('active');
+                errorDiv.textContent = 'Error: ' + error.message;
+                errorDiv.style.display = 'block';
+                hasPrediction = false;
+                updateExportButtonState();
+            }
+        });
+        
+        // Export button handler
+        exportBtn.addEventListener('click', async function() {
+            if (!checkpointSelect.value || !selectedImage || !hasPrediction) return;
+            
+            // Prepare form data
+            const formData = new FormData();
+            formData.append('checkpoint', checkpointSelect.value);
+            formData.append('image', selectedImage);
+            
+            if (gtInput.files[0]) {
+                formData.append('groundtruth', gtInput.files[0]);
+            }
+            
+            try {
+                exportBtn.disabled = true;
+                exportBtn.textContent = '⏳ Exporting...';
+                
+                const response = await fetch('/export', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.error || 'Export failed');
+                }
+                
+                // Download the file
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'segmentation_result.png';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+            } catch (error) {
+                errorDiv.textContent = 'Export Error: ' + error.message;
+                errorDiv.style.display = 'block';
+            } finally {
+                exportBtn.disabled = false;
+                exportBtn.textContent = '📥 Export Grid';
+            }
+        });
+    </script>
+</body>
+</html>
